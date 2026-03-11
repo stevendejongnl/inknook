@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: inknook-test-influxdb
+    environment:
+      INFLUXDB_DB: home
+      INFLUXDB_ADMIN_USER: admin
+      INFLUXDB_ADMIN_PASSWORD: admin123
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+      INFLUXDB_INITIAL_BUCKET: home
+      INFLUXDB_INITIAL_ORG: my-org
+      INFLUXDB_INITIAL_RETENTION: 30d
+      INFLUXDB_INITIAL_ADMIN_TOKEN: testtoken123456789
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # Simple HTTP mock server for Home Assistant endpoints
+  ha-mock:
+    image: python:3.13-slim
+    container_name: inknook-test-ha-mock
+    working_dir: /app
+    command: python -m http.server 8123 --directory /app
+    volumes:
+      - ./ha-mock-data:/app
+    ports:
+      - "8123:8123"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123"]
+      interval: 5s
+      timeout: 10s
+      retries: 20

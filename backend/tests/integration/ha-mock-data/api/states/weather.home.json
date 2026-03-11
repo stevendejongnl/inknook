@@ -1,0 +1,20 @@
+{
+  "entity_id": "weather.home",
+  "state": "cloudy",
+  "last_updated": "2026-03-10T15:30:00.000000+00:00",
+  "last_changed": "2026-03-10T15:25:00.000000+00:00",
+  "context": {
+    "id": "abc123",
+    "parent_id": null,
+    "user_id": null
+  },
+  "attributes": {
+    "temperature": 18.5,
+    "humidity": 65,
+    "pressure": 1013,
+    "wind_speed": 12,
+    "condition": "cloudy",
+    "icon": "mdi:cloud",
+    "friendly_name": "Weather"
+  }
+}

@@ -1,6 +1,7 @@
 # Root artifacts
 *.png
 *.bmp
+.playwright-mcp/
 
 # Python
 __pycache__/

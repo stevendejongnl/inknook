@@ -1,0 +1,21 @@
+{
+  "result": "success",
+  "tables": [
+    {
+      "columns": [
+        {"name": "result", "type": "string"},
+        {"name": "table", "type": "long"},
+        {"name": "_time", "type": "dateTime"},
+        {"name": "_value", "type": "double"},
+        {"name": "_field", "type": "string"},
+        {"name": "_measurement", "type": "string"},
+        {"name": "entity_id", "type": "string"}
+      ],
+      "data": [
+        ["", 0, "2026-03-10T15:00:00Z", 22.5, "value", "temperature", "sensor.living_room_temperature"],
+        ["", 0, "2026-03-10T14:30:00Z", 23.0, "value", "temperature", "sensor.living_room_temperature"],
+        ["", 0, "2026-03-10T14:00:00Z", 21.8, "value", "temperature", "sensor.living_room_temperature"]
+      ]
+    }
+  ]
+}

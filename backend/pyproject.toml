@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inknook-backend"
+version = "0.1.0"
+description = "FastAPI backend rendering 800x480 B/W e-paper dashboard for ESP32 + Waveshare 7.5\" display"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [{name = "Steven de Jong"}]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pillow>=10.0.0",
+    "httpx>=0.28.0",
+    "pydantic-settings>=2.0.0",
+    "google-auth>=2.25.0",
+    "google-auth-httplib2>=0.2.0",
+    "requests>=2.31.0",
+    "influxdb-client[async]>=1.44.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "responses>=0.25.0",
+    "httpx>=0.28.0",
+    "testcontainers>=4.0.0",
+    "nox>=2024.10.0",
+    "ruff>=0.8.0",
+    "mypy>=1.9.0",
+    "types-requests>=2.31.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=src --cov-fail-under=95 --cov-report=term-missing -m 'not integration'"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "integration: integration tests with real services (require Docker)",
+]
+
+[tool.coverage.run]
+omit = [
+    "src/main.py",  # Lifespan logic is integration-tested via routers
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ASYNC", "A"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

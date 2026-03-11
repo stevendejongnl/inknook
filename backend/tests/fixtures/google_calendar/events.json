@@ -1,0 +1,51 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p32gf12345\"",
+  "summary": "Steven de Jong",
+  "updated": "2026-03-10T15:30:00.000Z",
+  "timeZone": "Europe/Amsterdam",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "etag": "\"123456\"",
+      "id": "event1",
+      "summary": "Standup",
+      "start": {
+        "dateTime": "2026-03-10T09:30:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      },
+      "end": {
+        "dateTime": "2026-03-10T10:00:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "etag": "\"789012\"",
+      "id": "event2",
+      "summary": "Team meeting",
+      "start": {
+        "dateTime": "2026-03-10T14:00:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      },
+      "end": {
+        "dateTime": "2026-03-10T15:00:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "etag": "\"345678\"",
+      "id": "event3",
+      "summary": "1-on-1 with manager",
+      "start": {
+        "dateTime": "2026-03-10T16:00:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      },
+      "end": {
+        "dateTime": "2026-03-10T16:30:00+01:00",
+        "timeZone": "Europe/Amsterdam"
+      }
+    }
+  ]
+}
