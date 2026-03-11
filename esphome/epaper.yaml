@@ -1,0 +1,163 @@
+substitutions:
+  name: inknook-dashboard
+  friendly_name: "ePaper Dashboard"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: 200
+    then:
+      # Power up the display before SPI init
+      - output.turn_on: display_power
+      - delay: 100ms
+      # Trigger image fetch — deep sleep fires in on_download_finished / on_error
+      - component.update: dashboard_img
+
+esp32:
+  board: dfrobot_firebeetle2_esp32e
+  framework:
+    type: arduino
+
+# ── Connectivity ────────────────────────────────────────────────────────────
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Fallback AP if WiFi unavailable
+  ap:
+    ssid: "EPaper Fallback"
+    password: !secret ota_password
+
+captive_portal:
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret ha_api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ── Time ────────────────────────────────────────────────────────────────────
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Amsterdam
+    servers:
+      - pool.ntp.org
+      - time.nist.gov
+
+# ── I²C (BME280) ────────────────────────────────────────────────────────────
+
+i2c:
+  sda: GPIO17
+  scl: GPIO16
+  scan: true
+
+sensor:
+  - platform: bme280_i2c
+    address: 0x76
+    update_interval: 60s
+    temperature:
+      name: "BME280 Temperature"
+      id: bme280_temperature
+      unit_of_measurement: "°C"
+      accuracy_decimals: 1
+    humidity:
+      name: "BME280 Humidity"
+      id: bme280_humidity
+      unit_of_measurement: "%"
+      accuracy_decimals: 0
+    pressure:
+      name: "BME280 Pressure"
+      id: bme280_pressure
+      unit_of_measurement: "hPa"
+      accuracy_decimals: 1
+
+  # Battery voltage via ADC (GPIO35 = A2) with 1/2 voltage divider
+  # Formula: raw_voltage (0–1V range at pin) × 2 = actual battery voltage
+  - platform: adc
+    pin: GPIO35
+    name: "Battery Voltage"
+    id: battery_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 60s
+    attenuation: 11dB   # Full range: 0–3.9V
+    filters:
+      - multiply: 2.0   # Undo the 1/2 divider
+
+# ── SPI (e-paper display) ────────────────────────────────────────────────────
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+
+# ── Display power control (GPIO26) ──────────────────────────────────────────
+
+output:
+  - platform: gpio
+    id: display_power
+    pin: GPIO26
+
+# ── HTTP + Image fetch ───────────────────────────────────────────────────────
+
+http_request:
+  useragent: "esphome/inknook-dashboard"
+  timeout: 30s
+  verify_ssl: false
+
+image:
+  - file: https://esphome.io/_static/logo.png  # placeholder; overwritten at runtime
+    id: fallback_img
+    type: BINARY
+    resize: 1x1
+
+online_image:
+  - url: !secret backend_url
+    id: dashboard_img
+    format: BMP
+    type: BINARY
+    update_interval: never   # Triggered manually via component.update
+    on_download_finished:
+      then:
+        - component.update: epaper_display
+        - delay: 2s   # Let the display finish its refresh cycle
+        - deep_sleep.enter: main_sleep
+    on_error:
+      then:
+        - logger.log: "Image fetch failed — entering sleep"
+        - deep_sleep.enter: main_sleep
+
+# ── e-Paper display ──────────────────────────────────────────────────────────
+
+display:
+  - platform: waveshare_epaper
+    id: epaper_display
+    cs_pin: GPIO13
+    dc_pin: GPIO22
+    rst_pin: GPIO21
+    busy_pin:
+      number: GPIO14
+      inverted: true   # CRITICAL for Waveshare V2 — prevents display corruption
+    model: 7.50in-bV2
+    reset_duration: 200ms
+    update_interval: never   # Display is updated explicitly after image download
+    lambda: |-
+      it.image(0, 0, id(dashboard_img));
+
+# ── Deep sleep ───────────────────────────────────────────────────────────────
+
+deep_sleep:
+  id: main_sleep
+  run_duration: 45s      # Max awake time — enough to connect WiFi + fetch + render
+  sleep_duration: 30min  # Wake every 30 min between 6 AM and midnight
+
+  # Only sleep during active hours (6:00–23:59); outside that window sleep longer
+  # Note: ESPHome evaluates this condition before entering sleep
+  wakeup_pin_mode: IGNORE

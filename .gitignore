@@ -1,0 +1,29 @@
+# Root artifacts
+*.png
+*.bmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ESPHome
+esphome/secrets.yaml
+esphome/.esphome/
+
+# Node
+node_modules/
+
+# Editor
+.idea/
+.vscode/
+*.swp
