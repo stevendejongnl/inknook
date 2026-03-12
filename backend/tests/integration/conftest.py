@@ -1,9 +1,8 @@
 """Integration test fixtures with testcontainers."""
 
-import json
 import os
 import time
-from typing import Generator
+from collections.abc import Generator
 
 import httpx
 import pytest

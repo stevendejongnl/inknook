@@ -1,11 +1,10 @@
 """Tests for cache service."""
 
 import asyncio
-from datetime import datetime, timedelta
 
 import pytest
 
-from src.services.cache import CacheEntry, TTLCache
+from src.services.cache import TTLCache
 
 
 @pytest.mark.asyncio

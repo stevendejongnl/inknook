@@ -3,10 +3,9 @@
 import json
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from httpx import AsyncClient
 
 # Mock environment variables before importing settings
 os.environ.setdefault("HA_URL", "http://localhost:8123")
