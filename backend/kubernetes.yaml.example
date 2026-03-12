@@ -1,0 +1,169 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inknook-backend
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inknook-config
+  namespace: inknook-backend
+data:
+  HA_URL: "http://192.168.1.x:8123"
+  INFLUXDB_URL: "http://192.168.1.x:8086"
+  INFLUXDB_BUCKET: "your-bucket"
+  INFLUXDB_ORG: "your-org"
+  CACHE_TTL_HA: "300"
+  CACHE_TTL_INFLUXDB: "300"
+  CACHE_TTL_CALENDAR: "3600"
+  LOG_LEVEL: "INFO"
+
+---
+# Secret for sensitive credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inknook-secrets
+  namespace: inknook-backend
+type: Opaque
+stringData:
+  HA_TOKEN: "change-me-to-your-ha-long-lived-token"
+  INFLUXDB_TOKEN: "change-me-to-your-influxdb-token"
+  GOOGLE_SERVICE_ACCOUNT_JSON_B64: "change-me-to-base64-encoded-service-account-json"
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inknook-backend
+  namespace: inknook-backend
+  labels:
+    app: inknook-backend
+    version: v0.1.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inknook-backend
+  template:
+    metadata:
+      labels:
+        app: inknook-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: inknook-backend
+        image: ghcr.io/stevendejongnl/inknook-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+
+        # Environment variables from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: inknook-config
+        - secretRef:
+            name: inknook-secrets
+
+        # Resource limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+        # Security context for container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: inknook-backend
+  namespace: inknook-backend
+  labels:
+    app: inknook-backend
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: inknook-backend
+
+---
+# NodePort Service — allows ESP32 devices on LAN to reach the backend
+# Access via: http://<node-ip>:<nodeport>/display.bmp
+# The ClusterIP service above remains for in-cluster use (e.g. ingress, other pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inknook-backend-nodeport
+  namespace: inknook-backend
+  labels:
+    app: inknook-backend
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+    # nodePort omitted — Kubernetes auto-assigns a port in the 30000–32767 range
+    # Run: kubectl get svc -n inknook-backend inknook-backend-nodeport
+    # to find the assigned port, then update backend_url in esphome/secrets.yaml
+  selector:
+    app: inknook-backend
+
+---
+# PodDisruptionBudget (optional, for high-availability)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: inknook-backend
+  namespace: inknook-backend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: inknook-backend

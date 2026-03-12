@@ -53,3 +53,6 @@ htmlcov/
 *.bmp
 *.png
 test_output/
+
+# Kubernetes manifest with real credentials (use kubernetes.yaml.example as template)
+kubernetes.yaml
