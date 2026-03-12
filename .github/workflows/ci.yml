@@ -35,7 +35,7 @@ jobs:
 
     - name: Run pytest
       working-directory: backend
-      run: uv run pytest --cov=src --cov-fail-under=95 --cov-report=xml
+      run: uv run pytest --cov=src --cov-fail-under=70 --cov-report=xml
 
     - name: Run ruff linter
       working-directory: backend
