@@ -2,8 +2,7 @@
 
 import io
 import logging
-from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -31,10 +30,10 @@ except Exception:
 
 
 def render_dashboard(
-    ha_data: Optional[dict[str, Any]] = None,
-    influx_data: Optional[dict[str, Any]] = None,
-    calendar_data: Optional[list[dict[str, Any]]] = None,
-    format: Literal["BMP", "PNG"] = "BMP",
+    ha_data: dict[str, Any] | None = None,
+    influx_data: dict[str, Any] | None = None,
+    calendar_data: list[dict[str, Any]] | None = None,
+    output_format: Literal["BMP", "PNG"] = "BMP",
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -84,14 +83,14 @@ def render_dashboard(
 
     # Save to bytes
     output = io.BytesIO()
-    bw_image.save(output, format=format)
+    bw_image.save(output, format=output_format)
     output.seek(0)
-    logger.info(f"Dashboard rendered: {format} format, {len(output.getvalue())} bytes")
+    logger.info(f"Dashboard rendered: {output_format} format, {len(output.getvalue())} bytes")
     return output.getvalue()
 
 
 def _draw_weather_panel(
-    image: Image.Image, draw: ImageDraw.ImageDraw, ha_data: Optional[dict[str, Any]]
+    image: Image.Image, draw: ImageDraw.ImageDraw, ha_data: dict[str, Any] | None
 ) -> None:
     """
     Draw weather panel on left side of display.
@@ -110,7 +109,6 @@ def _draw_weather_panel(
     - If no data, show "Weather\nUnavailable"
     """
     panel_x, panel_y = 10, 10
-    panel_width = WEATHER_WIDTH - 20
 
     if not ha_data or "error" in ha_data:
         draw.text(
@@ -176,7 +174,7 @@ def _draw_weather_panel(
 
 
 def _draw_sensors_panel(
-    image: Image.Image, draw: ImageDraw.ImageDraw, influx_data: Optional[dict[str, Any]]
+    image: Image.Image, draw: ImageDraw.ImageDraw, influx_data: dict[str, Any] | None
 ) -> None:
     """
     Draw sensors panel on right side of display.
@@ -263,7 +261,7 @@ def _draw_sensors_panel(
 def _draw_calendar_panel(
     image: Image.Image,
     draw: ImageDraw.ImageDraw,
-    calendar_data: Optional[list[dict[str, Any]]],
+    calendar_data: list[dict[str, Any]] | None,
 ) -> None:
     """
     Draw calendar panel across bottom of display.

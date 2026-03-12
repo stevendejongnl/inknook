@@ -1,8 +1,8 @@
 """FastAPI application factory with lifespan management."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import httpx
 from fastapi import FastAPI

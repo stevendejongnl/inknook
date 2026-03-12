@@ -1,9 +1,9 @@
 """Cache service with TTL and per-source locking."""
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -19,9 +19,9 @@ class CacheStatus:
     """Status information for a cache source."""
 
     expired: bool
-    last_updated: Optional[str]
-    expires_at: Optional[str]
-    ttl_remaining_seconds: Optional[int]
+    last_updated: str | None
+    expires_at: str | None
+    ttl_remaining_seconds: int | None
 
 
 class TTLCache:
@@ -32,7 +32,7 @@ class TTLCache:
         self._cache: dict[str, CacheEntry] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
-    async def get(self, source: str) -> Optional[dict]:
+    async def get(self, source: str) -> dict | None:
         """
         Get cached data for source if not expired.
 

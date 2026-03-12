@@ -1,9 +1,7 @@
 """Google Calendar API client with service account auth."""
 
-import json
 import logging
 from datetime import datetime
-from typing import Any, Optional
 
 import httpx
 from google.auth.transport.requests import Request
@@ -25,10 +23,10 @@ class GoogleCalendarClient:
         """
         self.service_account_json = service_account_json
         self.http_client = http_client
-        self._credentials: Optional[Credentials] = None
-        self._access_token: Optional[str] = None
+        self._credentials: Credentials | None = None
+        self._access_token: str | None = None
 
-    async def _get_access_token(self) -> Optional[str]:
+    async def _get_access_token(self) -> str | None:
         """
         Get valid access token using service account JWT.
 

@@ -105,12 +105,12 @@ async def get_display_bmp(
         ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
             cache, http_client, force_refresh
         )
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, format="BMP")
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP")
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
         logger.error(f"Error rendering BMP: {e}")
         # Return placeholder "No Data" image
-        placeholder = render_dashboard(None, None, None, format="BMP")
+        placeholder = render_dashboard(None, None, None, output_format="BMP")
         return Response(content=placeholder, media_type="image/bmp")
 
 
@@ -133,10 +133,10 @@ async def get_display_png(
         ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
             cache, http_client, force_refresh
         )
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, format="PNG")
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG")
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:
         logger.error(f"Error rendering PNG: {e}")
         # Return placeholder "No Data" image
-        placeholder = render_dashboard(None, None, None, format="PNG")
+        placeholder = render_dashboard(None, None, None, output_format="PNG")
         return Response(content=placeholder, media_type="image/png")

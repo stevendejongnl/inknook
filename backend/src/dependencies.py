@@ -1,6 +1,6 @@
 """Dependency injection for FastAPI application."""
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import httpx
 from fastapi import FastAPI

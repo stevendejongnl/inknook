@@ -1,7 +1,7 @@
 """Home Assistant REST API client."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -70,7 +70,7 @@ class HomeAssistantClient:
                 else:
                     # 4xx error, don't retry
                     return {"error": f"HTTP {response.status_code}: {response.text}"}
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"HA: Timeout fetching {entity_id}, retrying...")
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt

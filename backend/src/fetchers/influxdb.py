@@ -1,7 +1,7 @@
 """InfluxDB async client for Flux queries."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -156,7 +156,7 @@ class InfluxDBClient:
                     continue
                 else:
                     return {"error": f"HTTP {response.status_code}"}
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("InfluxDB: Timeout, retrying...")
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt
