@@ -35,8 +35,6 @@ logger:
   level: INFO
 
 api:
-  encryption:
-    key: !secret ha_api_key
 
 ota:
   - platform: esphome
@@ -88,7 +86,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     update_interval: 60s
-    attenuation: 11dB   # Full range: 0–3.9V
+    attenuation: 12dB   # Full range: 0–3.9V
     filters:
       - multiply: 2.0   # Undo the 1/2 divider
 
@@ -111,12 +109,6 @@ http_request:
   useragent: "esphome/inknook-dashboard"
   timeout: 30s
   verify_ssl: false
-
-image:
-  - file: https://esphome.io/_static/logo.png  # placeholder; overwritten at runtime
-    id: fallback_img
-    type: BINARY
-    resize: 1x1
 
 online_image:
   - url: !secret backend_url
@@ -141,7 +133,7 @@ display:
     id: epaper_display
     cs_pin: GPIO13
     dc_pin: GPIO22
-    rst_pin: GPIO21
+    reset_pin: GPIO21
     busy_pin:
       number: GPIO14
       inverted: true   # CRITICAL for Waveshare V2 — prevents display corruption
