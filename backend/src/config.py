@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     google_service_account_json_b64: str = ""
     google_calendar_id: str = "primary"
 
+    # Display timezone (IANA name, e.g. Europe/Amsterdam)
+    display_timezone: str = "Europe/Amsterdam"
+
     # Cache TTLs (seconds)
     cache_ttl_ha: int = 300
     cache_ttl_influxdb: int = 300

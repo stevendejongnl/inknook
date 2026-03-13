@@ -2,6 +2,7 @@
 
 import logging
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Query, Request
@@ -62,7 +63,6 @@ async def _fetch_dashboard_data(
             influx_data = {
                 "temperature_avg": temp_avg,
                 "humidity_avg": humid_avg,
-                "pressure": 1013,  # TODO: Add pressure from HA
             }
             await cache.set("influxdb", influx_data, settings.cache_ttl_influxdb)
             logger.info("Fetched fresh InfluxDB data")
@@ -77,7 +77,7 @@ async def _fetch_dashboard_data(
             calendar_client = GoogleCalendarClient(
                 settings.google_service_account_json, http_client
             )
-            calendar_data = await calendar_client.get_upcoming_events(max_results=4)
+            calendar_data = await calendar_client.get_upcoming_events(max_results=20)
             await cache.set("calendar", calendar_data, settings.cache_ttl_calendar)
             logger.info("Fetched fresh calendar data")
         else:
@@ -105,7 +105,8 @@ async def get_display_bmp(
         ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
             cache, http_client, force_refresh
         )
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP")
+        tz = ZoneInfo(settings.display_timezone)
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP", display_tz=tz)
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
         logger.error(f"Error rendering BMP: {e}")
@@ -133,7 +134,8 @@ async def get_display_png(
         ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
             cache, http_client, force_refresh
         )
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG")
+        tz = ZoneInfo(settings.display_timezone)
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG", display_tz=tz)
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:
         logger.error(f"Error rendering PNG: {e}")

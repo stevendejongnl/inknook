@@ -2,9 +2,13 @@
 
 import io
 import logging
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont
+
+_DEFAULT_TZ = ZoneInfo("Europe/Amsterdam")
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +26,15 @@ try:
     FONT_LARGE = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
     FONT_MEDIUM = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
     FONT_SMALL = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+    FONT_TINY = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+    FONT_TINY_BOLD = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
 except Exception:
     logger.warning("Could not load system fonts, using default")
     FONT_LARGE = ImageFont.load_default()
     FONT_MEDIUM = ImageFont.load_default()
     FONT_SMALL = ImageFont.load_default()
+    FONT_TINY = ImageFont.load_default()
+    FONT_TINY_BOLD = ImageFont.load_default()
 
 
 def render_dashboard(
@@ -34,6 +42,7 @@ def render_dashboard(
     influx_data: dict[str, Any] | None = None,
     calendar_data: list[dict[str, Any]] | None = None,
     output_format: Literal["BMP", "PNG"] = "BMP",
+    display_tz: ZoneInfo | None = None,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -64,8 +73,8 @@ def render_dashboard(
     - If API error, show last cached data
     - If all data missing, show "No Data Available"
     """
-    # Create white background image
-    image = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=255)
+    # Create white background image — must pass tuple for RGB, not int
+    image = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
 
     # Draw dividing lines
@@ -73,13 +82,17 @@ def render_dashboard(
     draw.line([(WEATHER_WIDTH, 0), (WEATHER_WIDTH, CALENDAR_TOP)], fill=0, width=1)
     draw.line([(0, CALENDAR_TOP), (DISPLAY_WIDTH, CALENDAR_TOP)], fill=0, width=1)
 
+    tz = display_tz or _DEFAULT_TZ
+
     # Draw panels
     _draw_weather_panel(image, draw, ha_data)
     _draw_sensors_panel(image, draw, influx_data)
-    _draw_calendar_panel(image, draw, calendar_data)
+    _draw_calendar_panel(image, draw, calendar_data, tz)
 
-    # Convert to 1-bit B/W with Floyd-Steinberg dithering
-    bw_image = image.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+    # Convert to 1-bit B/W — hard threshold, no dithering.
+    # Floyd-Steinberg would propagate error from anti-aliased font edges
+    # into the white background, creating noise across the whole image.
+    bw_image = image.convert("1", dither=Image.Dither.NONE)
 
     # Save to bytes
     output = io.BytesIO()
@@ -123,14 +136,25 @@ def _draw_weather_panel(
         # Extract data from HA response
         attrs = ha_data.get("attributes", {})
         temperature = attrs.get("temperature", "N/A")
-        condition = attrs.get("condition", "Unknown").capitalize()
+        # Condition is the entity state, not an attribute
+        condition = ha_data.get("state", "?").replace("-", " ").capitalize()
         wind_speed = attrs.get("wind_speed", "N/A")
+        precipitation = attrs.get("precipitation")
+        cloud_coverage = attrs.get("cloud_coverage")
 
         # Format temperature string
         if isinstance(temperature, (int, float)):
             temp_str = f"{temperature}°C"
         else:
             temp_str = str(temperature)
+
+        # Build rain string: prefer precipitation mm/h, fall back to cloud coverage
+        if precipitation is not None:
+            rain_str = f"Rain: {precipitation:.1f} mm"
+        elif cloud_coverage is not None:
+            rain_str = f"Clouds: {cloud_coverage:.0f}%"
+        else:
+            rain_str = "Rain: --"
 
         # Draw title
         draw.text(
@@ -151,7 +175,7 @@ def _draw_weather_panel(
         # Draw condition
         draw.text(
             (panel_x, panel_y + 100),
-            f"{condition}",
+            condition,
             fill=0,
             font=FONT_SMALL,
         )
@@ -160,6 +184,14 @@ def _draw_weather_panel(
         draw.text(
             (panel_x, panel_y + 130),
             f"Wind: {wind_speed} km/h",
+            fill=0,
+            font=FONT_SMALL,
+        )
+
+        # Draw rain/precipitation
+        draw.text(
+            (panel_x, panel_y + 160),
+            rain_str,
             fill=0,
             font=FONT_SMALL,
         )
@@ -206,20 +238,17 @@ def _draw_sensors_panel(
         # Extract aggregated sensor data
         temperature_avg = influx_data.get("temperature_avg", -999.0)
         humidity_avg = influx_data.get("humidity_avg", -999.0)
-        pressure = influx_data.get("pressure", "N/A")
 
         # Format strings
-        if temperature_avg > -999:
+        if isinstance(temperature_avg, (int, float)) and temperature_avg > -999:
             temp_str = f"Avg Temp: {temperature_avg:.1f}°C"
         else:
             temp_str = "Avg Temp: N/A"
 
-        if humidity_avg > -999:
+        if isinstance(humidity_avg, (int, float)) and humidity_avg > -999:
             humid_str = f"Avg Humidity: {humidity_avg:.0f}%"
         else:
             humid_str = "Avg Humidity: N/A"
-
-        pressure_str = f"Pressure: {pressure} hPa"
 
         # Draw title
         draw.text(
@@ -242,12 +271,6 @@ def _draw_sensors_panel(
             fill=0,
             font=FONT_SMALL,
         )
-        draw.text(
-            (panel_x, panel_y + 110),
-            pressure_str,
-            fill=0,
-            font=FONT_SMALL,
-        )
     except Exception as e:
         logger.error(f"Error drawing sensors panel: {e}")
         draw.text(
@@ -258,77 +281,101 @@ def _draw_sensors_panel(
         )
 
 
+def _parse_event_dt(start_str: str, tz: ZoneInfo) -> datetime | None:
+    """Parse event start string to local datetime."""
+    try:
+        if not start_str:
+            return None
+        if "T" in start_str:
+            dt = datetime.fromisoformat(start_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(tz)
+        else:
+            # All-day event: treat as midnight local time
+            d = date.fromisoformat(start_str)
+            return datetime(d.year, d.month, d.day, tzinfo=tz)
+    except (ValueError, TypeError):
+        return None
+
+
+def _day_label(d: date, tz: ZoneInfo) -> str:
+    """Return 'Today', 'Tomorrow', or short weekday + date."""
+    today = datetime.now(tz).date()
+    if d == today:
+        return f"Today  {d.strftime('%-d %b')}"
+    if d == today + timedelta(days=1):
+        return f"Tomorrow  {d.strftime('%-d %b')}"
+    return d.strftime("%a  %-d %b")
+
+
 def _draw_calendar_panel(
     image: Image.Image,
     draw: ImageDraw.ImageDraw,
     calendar_data: list[dict[str, Any]] | None,
+    tz: ZoneInfo,
 ) -> None:
     """
     Draw calendar panel across bottom of display.
 
-    Args:
-        image: PIL Image to draw on
-        draw: ImageDraw object
-        calendar_data: List of upcoming events (optional)
-
-    Visual:
-    - Bottom box: 0-800px wide, 240-480px tall
-    - Draw border
-    - List next 4 events (one per line) with time + title
-    - Format: "09:30 - Standup"
+    4-column layout, one column per day (today + 3 days).
+    Each column shows a day header and up to ~8 events.
+    Times are shown in Amsterdam local time.
     """
-    panel_x, panel_y = 10, CALENDAR_TOP + 10
-    max_events = 4
+    panel_y = CALENDAR_TOP + 8
+    col_width = DISPLAY_WIDTH // 4  # 200px per column
+    row_h = 20  # pixels per event row
+    max_rows = 10  # max events per column
 
-    # Draw title
-    draw.text(
-        (panel_x, panel_y),
-        "Calendar",
-        fill=0,
-        font=FONT_MEDIUM,
-    )
+    # Group events by local date
+    today = datetime.now(tz).date()
+    by_day: dict[date, list[tuple[datetime | None, dict]]] = {}
+    for i in range(4):
+        by_day[today + timedelta(days=i)] = []
 
-    if not calendar_data or len(calendar_data) == 0:
-        draw.text(
-            (panel_x, panel_y + 40),
-            "No upcoming events",
-            fill=0,
-            font=FONT_SMALL,
-        )
-        return
+    if calendar_data:
+        for event in calendar_data:
+            dt = _parse_event_dt(event.get("start", ""), tz)
+            if dt is None:
+                continue
+            d = dt.date()
+            if d in by_day:
+                by_day[d].append((dt, event))
 
-    try:
-        # Draw up to 4 events
-        for idx, event in enumerate(calendar_data[:max_events]):
-            y_offset = panel_y + 40 + (idx * 40)
+    # Draw each column
+    for col, day in enumerate(sorted(by_day)):
+        col_x = col * col_width + 6
+        y = panel_y
 
-            # Extract event data
-            summary = event.get("summary", "Untitled")
-            start_str = event.get("start", "")
+        # Day header
+        label = _day_label(day, tz)
+        draw.text((col_x, y), label, fill=0, font=FONT_TINY_BOLD)
+        y += row_h + 2
+        # Separator line under header
+        draw.line([(col_x, y), (col_x + col_width - 10, y)], fill=0, width=1)
+        y += 4
 
-            # Parse time from ISO format (e.g., "2026-03-10T09:30:00+01:00")
-            try:
-                if "T" in start_str:
-                    # Extract time part (HH:MM)
-                    time_part = start_str.split("T")[1][:5]  # "09:30"
+        events = by_day[day]
+        if not events:
+            draw.text((col_x, y), "–", fill=0, font=FONT_TINY)
+        else:
+            for row_idx, (dt, event) in enumerate(events[:max_rows]):
+                summary = event.get("summary", "Untitled")
+                start_raw = event.get("start", "")
+                is_allday = "T" not in start_raw
+
+                if is_allday:
+                    time_str = "allday"
+                elif dt:
+                    time_str = dt.strftime("%H:%M")
                 else:
-                    time_part = "TBD"
-            except Exception:
-                time_part = "TBD"
+                    time_str = "?"
 
-            # Format event line
-            event_line = f"{time_part} - {summary[:40]}"
-            draw.text(
-                (panel_x, y_offset),
-                event_line,
-                fill=0,
-                font=FONT_SMALL,
-            )
-    except Exception as e:
-        logger.error(f"Error drawing calendar panel: {e}")
-        draw.text(
-            (panel_x, panel_y + 40),
-            "Calendar error",
-            fill=0,
-            font=FONT_SMALL,
-        )
+                # Truncate summary to fit ~23 chars in 194px @ 16px font
+                max_chars = 18
+                if len(summary) > max_chars:
+                    summary = summary[: max_chars - 1] + "…"
+
+                line = f"{time_str} {summary}"
+                draw.text((col_x, y), line, fill=0, font=FONT_TINY)
+                y += row_h

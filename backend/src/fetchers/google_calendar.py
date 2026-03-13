@@ -1,7 +1,7 @@
 """Google Calendar API client with service account auth."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from google.auth.transport.requests import Request
@@ -56,7 +56,7 @@ class GoogleCalendarClient:
             logger.error(f"Google Calendar: Failed to get access token: {e}")
             return None
 
-    async def get_upcoming_events(self, max_results: int = 5) -> list[dict]:
+    async def get_upcoming_events(self, max_results: int = 20) -> list[dict]:
         """
         Fetch upcoming calendar events.
 
@@ -79,12 +79,14 @@ class GoogleCalendarClient:
             return []
 
         try:
-            now = datetime.utcnow().isoformat() + "Z"
+            now = datetime.utcnow()
+            time_max = now + timedelta(days=4)
             from src.config import settings
             calendar_id = settings.google_calendar_id
             url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
             params = {
-                "timeMin": now,
+                "timeMin": now.isoformat() + "Z",
+                "timeMax": time_max.isoformat() + "Z",
                 "maxResults": max_results,
                 "orderBy": "startTime",
                 "singleEvents": "true",
