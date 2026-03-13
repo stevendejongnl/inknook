@@ -2,7 +2,7 @@
 
 import io
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -289,7 +289,7 @@ def _parse_event_dt(start_str: str, tz: ZoneInfo) -> datetime | None:
         if "T" in start_str:
             dt = datetime.fromisoformat(start_str)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt.astimezone(tz)
         else:
             # All-day event: treat as midnight local time
