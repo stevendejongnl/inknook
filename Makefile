@@ -1,6 +1,6 @@
 SUBDIRS := esphome backend
 
-.PHONY: help clean
+.PHONY: help clean hooks
 
 # ── Help: parse ## comments from all sub-Makefiles ───────────────────────────
 
@@ -17,6 +17,12 @@ clean:
 		echo "--- Cleaning $$d ---"; \
 		$(MAKE) -C $$d clean; \
 	done
+
+# ── Hooks: install versioned git hooks from .githooks/ ───────────────────────
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed from .githooks/"
 
 # ── Catch-all: delegate to whichever subdir owns this target ─────────────────
 # Any target added to esphome/Makefile or backend/Makefile automatically works.

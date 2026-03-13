@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# pre-commit: scan staged files for secrets using gitleaks.
+exec gitleaks git --staged --no-banner

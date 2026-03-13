@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# pre-push: scan commits about to be pushed for secrets using gitleaks.
+set -euo pipefail
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        # New branch — scan all commits reachable from local_sha
+        log_opts="$local_sha"
+    else
+        log_opts="$remote_sha..$local_sha"
+    fi
+
+    gitleaks git --no-banner --log-opts="$log_opts" || exit 1
+done

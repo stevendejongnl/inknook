@@ -1,0 +1,18 @@
+# gitleaks config for inknook
+# See https://github.com/gitleaks/gitleaks for full reference.
+
+[extend]
+# Use the upstream default ruleset as the base
+useDefault = true
+
+[[allowlists]]
+description = "ESPHome secret references are not values"
+# !secret foo is a reference, not a credential
+regexes = ['''!secret \w+''']
+
+[[allowlists]]
+description = "Example / placeholder values in docs and env examples"
+paths = [
+    '''.env\.example''',
+    '''README.*''',
+]
