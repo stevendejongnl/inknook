@@ -41,7 +41,7 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps", "extensions"]
-    resources: ["deployments", "replicasets", "statefulsets"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "watch", "update", "patch"]
   - apiGroups: ["batch"]
     resources: ["cronjobs"]
@@ -121,11 +121,17 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+      volumes:
+        - name: data
+          emptyDir: {}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534  # nobody

@@ -57,6 +57,24 @@ All commands run from `backend/`:
 The backend reserves the bottom 32px (`BOTTOM_BAR_HEIGHT`). ESPHome draws the live
 battery%, WiFi RSSI, and last-update time over that region after loading the image.
 
+## Kubernetes
+
+Manifests live in `kubernetes/`. Apply with local kubectl (kubeconfig at `~/.kube/config`):
+
+```bash
+kubectl apply -f kubernetes/keel.yaml     # one-time: deploy Keel image watcher
+kubectl apply -f backend/kubernetes.yaml  # deploy/update inknook backend
+```
+
+**SSH to nodes**: Use `SSH_AUTH_SOCK=~/.1password/agent.sock ssh kubernetes-master-01` (1Password SSH agent, user `root`). The local `~/.ssh/id_rsa` is corrupt — always use the agent.
+
+**Auto-redeployment (Keel)**: `kubernetes/keel.yaml` runs Keel in the `keel` namespace. It polls container registries every 5 min and triggers a rolling restart when the image digest changes. Opt a deployment in by adding to `spec.template.metadata.annotations`:
+```yaml
+keel.sh/policy: force
+keel.sh/trigger: poll
+keel.sh/pollSchedule: "@every 5m"
+```
+
 ## Battery Thresholds
 
 - LiPo range: 3.0V (empty) → 4.2V (full)
