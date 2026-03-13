@@ -78,6 +78,7 @@ jobs:
       with:
         context: backend
         push: true
+        provenance: false  # Avoid OCI index format — Keel can't poll manifests with Accept: OCI index
         tags: |
           ghcr.io/stevendejongnl/inknook-backend:latest
           ghcr.io/stevendejongnl/inknook-backend:${{ github.sha }}
