@@ -94,6 +94,7 @@ def render_dashboard(
     invert: bool = True,
     forecast_data: list[dict[str, Any]] | None = None,
     sensors_display: list[dict[str, Any]] | None = None,
+    departures_display: list[dict[str, Any]] | None = None,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -123,7 +124,7 @@ def render_dashboard(
     tz = display_tz or _DEFAULT_TZ
 
     _draw_weather_panel(image, draw, ha_data, forecast_data)
-    _draw_sensors_panel(image, draw, sensors_display)
+    _draw_sensors_panel(image, draw, sensors_display, departures_display)
     _draw_calendar_panel(image, draw, calendar_data, tz)
 
     gray = image.convert("L")
@@ -272,29 +273,92 @@ def _draw_weather_panel(
         draw.text((panel_x, panel_y), "Weather\nError", fill=0, font=FONT_MEDIUM)
 
 
+def _draw_departures_section(
+    draw: ImageDraw.ImageDraw,
+    departures_display: list[dict[str, Any]],
+    panel_x: int,
+    y: int,
+    panel_w: int,
+    bottom: int,
+) -> int:
+    """
+    Draw departure rows for each configured direction.
+
+    Each row: "→ <direction>  HH:MM  HH:MM  HH:MM  HH:MM"
+    Delayed entries are marked with "+Xm" appended.
+
+    Returns the y position after the last row.
+    """
+    # Bus icon glyph (mdi:bus = F012E)
+    mdi = _ensure_mdi_font(16)
+    bus_glyph = "\U000F012E"  # mdi:bus
+
+    for dep in departures_display:
+        if y + 36 > bottom:
+            break
+        line = dep.get("line", "")
+        direction = dep.get("direction", "")
+        times = dep.get("times", [])
+
+        # Direction header: "[bus] Line → Direction"
+        header = f"{line} → {direction}"
+        if mdi:
+            draw.text((panel_x, y), bus_glyph, fill=0, font=mdi)
+            draw.text((panel_x + 20, y), header, fill=0, font=FONT_TINY_BOLD)
+        else:
+            draw.text((panel_x, y), header, fill=0, font=FONT_TINY_BOLD)
+        y += 18
+
+        # Departure times row
+        if times:
+            parts = []
+            for t in times:
+                s = t["time"]
+                if t.get("delay_min", 0) > 0:
+                    s += f"+{t['delay_min']}m"
+                parts.append(s)
+            draw.text((panel_x + 20, y), "  ".join(parts), fill=0, font=FONT_TINY)
+        else:
+            draw.text((panel_x + 20, y), "No upcoming departures", fill=0, font=FONT_TINY)
+        y += 20
+
+    return y
+
+
 def _draw_sensors_panel(
     image: Image.Image,
     draw: ImageDraw.ImageDraw,
     sensors_display: list[dict[str, Any]] | None,
+    departures_display: list[dict[str, Any]] | None = None,
 ) -> None:
     """
-    Draw configurable sensor list from sensors.yaml in the top-right panel.
+    Draw the top-right panel (x=400–800, y=0–240).
 
-    Each entry: {"label": str, "value": str, "unit": str}
-    Panel bounds: x=400–800, y=0–240
+    Layout (top to bottom):
+    1. Departures section — one row per direction with next departure times
+    2. Horizontal divider (if both sections present)
+    3. Sensors section — configurable sensor values from sensors.yaml
     """
-    panel_x, panel_y = 410, 10
+    panel_x = 410
+    panel_w = DISPLAY_WIDTH - panel_x - 5
+    bottom = CALENDAR_TOP - 6
+    y = 10
 
-    draw.text((panel_x, panel_y), "Sensors", fill=0, font=FONT_MEDIUM)
+    # ── Departures ────────────────────────────────────────────────────────────
+    if departures_display:
+        y = _draw_departures_section(draw, departures_display, panel_x, y, panel_w, bottom)
 
+        if sensors_display and y + 6 < bottom:
+            draw.line([(panel_x, y + 2), (DISPLAY_WIDTH - 10, y + 2)], fill=0, width=1)
+            y += 8
+
+    # ── Sensors ───────────────────────────────────────────────────────────────
     if not sensors_display:
-        draw.text((panel_x, panel_y + 38), "No sensors configured", fill=0, font=FONT_TINY)
+        if not departures_display:
+            draw.text((panel_x, y), "No data configured", fill=0, font=FONT_TINY)
         return
 
     line_h = 19
-    y = panel_y + 38
-    bottom = CALENDAR_TOP - 6
-
     for sensor in sensors_display:
         if y >= bottom:
             break
@@ -303,7 +367,6 @@ def _draw_sensors_panel(
         unit = sensor.get("unit", "")
         value_str = f"{value} {unit}".strip() if unit else value
 
-        # Bold label, then value on same line
         label_w = int(draw.textlength(f"{label}: ", font=FONT_TINY_BOLD)) + 1
         draw.text((panel_x, y), f"{label}:", fill=0, font=FONT_TINY_BOLD)
         draw.text((panel_x + label_w, y), value_str, fill=0, font=FONT_TINY)

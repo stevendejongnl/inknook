@@ -206,3 +206,78 @@ def test_precip_chart_missing_precipitation_key():
     draw = ImageDraw.Draw(img)
     forecast_data = [{"datetime": f"2026-03-13T{h:02d}:00:00+01:00"} for h in range(24)]
     _draw_precip_chart(draw, forecast_data, origin_x=10, baseline_y=220, chart_w=370, chart_h=80)
+
+
+def test_render_dashboard_with_departures():
+    """Test rendering with departure data for two directions."""
+    departures_display = [
+        {
+            "line": "340",
+            "direction": "Haarlem Stn",
+            "times": [
+                {"time": "14:03", "delay_min": 0},
+                {"time": "14:11", "delay_min": 0},
+                {"time": "14:19", "delay_min": 2},
+                {"time": "14:26", "delay_min": 0},
+            ],
+        },
+        {
+            "line": "340",
+            "direction": "Uithoorn Bus",
+            "times": [
+                {"time": "14:04", "delay_min": 0},
+                {"time": "14:12", "delay_min": 0},
+                {"time": "14:19", "delay_min": 0},
+                {"time": "14:27", "delay_min": 3},
+            ],
+        },
+    ]
+    image_bytes = render_dashboard(departures_display=departures_display, output_format="BMP")
+    assert len(image_bytes) > 0
+    img = Image.open(BytesIO(image_bytes))
+    assert img.size == (800, 480)
+
+
+def test_render_dashboard_departures_and_sensors_combined():
+    """Test rendering with both departures and sensors in the right panel."""
+    departures_display = [
+        {
+            "line": "340",
+            "direction": "Haarlem Stn",
+            "times": [{"time": "14:03", "delay_min": 0}],
+        }
+    ]
+    sensors_display = [
+        {"label": "Living Room", "value": "21.3", "unit": "°C"},
+    ]
+    image_bytes = render_dashboard(
+        departures_display=departures_display,
+        sensors_display=sensors_display,
+        output_format="BMP",
+    )
+    assert len(image_bytes) > 0
+
+
+def test_render_dashboard_departures_empty_times():
+    """Test departure row with no upcoming times shows fallback text."""
+    departures_display = [
+        {"line": "340", "direction": "Haarlem Stn", "times": []},
+    ]
+    image_bytes = render_dashboard(departures_display=departures_display, output_format="BMP")
+    assert len(image_bytes) > 0
+
+
+def test_render_dashboard_departures_with_delay():
+    """Test that delayed departures render without crash."""
+    departures_display = [
+        {
+            "line": "340",
+            "direction": "Haarlem Stn",
+            "times": [
+                {"time": "14:03", "delay_min": 5},
+                {"time": "14:11", "delay_min": 10},
+            ],
+        }
+    ]
+    image_bytes = render_dashboard(departures_display=departures_display, output_format="BMP")
+    assert len(image_bytes) > 0

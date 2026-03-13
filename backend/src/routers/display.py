@@ -1,6 +1,7 @@
 """Display endpoints for BMP/PNG rendering."""
 
 import logging
+from datetime import datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -8,7 +9,7 @@ import httpx
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
-from src.config import load_sensor_configs, settings
+from src.config import load_departure_configs, load_sensor_configs, settings
 from src.fetchers.google_calendar import GoogleCalendarClient
 from src.fetchers.home_assistant import HomeAssistantClient
 from src.fetchers.influxdb import InfluxDBClient
@@ -16,10 +17,14 @@ from src.services.cache import TTLCache
 from src.services.renderer import render_dashboard
 
 _sensor_configs = load_sensor_configs()
+_departure_configs = load_departure_configs()
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["display"])
+
+# Short TTL for departure data — bus times change every few minutes
+_CACHE_TTL_DEPARTURES = 60
 
 
 def _build_sensors_display(
@@ -55,25 +60,69 @@ def _build_sensors_display(
     return result
 
 
+def _build_departures_display(
+    departure_configs: list, departure_entities: list[dict], tz: ZoneInfo
+) -> list[dict]:
+    """
+    Convert raw HA departure sensor states into display-ready departure dicts.
+
+    Returns a list of:
+      {
+        "line": "340",
+        "direction": "Haarlem Station",   # from attrs or short_direction override
+        "times": [
+          {"time": "14:03", "delay_min": 0},
+          ...
+        ]
+      }
+    """
+    result = []
+    for cfg, entity in zip(departure_configs, departure_entities):
+        if not entity or "error" in entity:
+            continue
+        attrs = entity.get("attributes", {})
+        line = attrs.get("line_name", "?")
+        direction = cfg.short_direction or attrs.get("direction", "?")
+        raw_times = attrs.get("times", [])
+
+        times = []
+        now = datetime.now(tz)
+        for entry in raw_times:
+            planned_str = entry.get("planned", "")
+            estimated_str = entry.get("estimated", planned_str)
+            try:
+                planned_dt = datetime.fromisoformat(planned_str).astimezone(tz)
+                estimated_dt = datetime.fromisoformat(estimated_str).astimezone(tz)
+            except (ValueError, TypeError):
+                continue
+            # Skip departures in the past
+            if planned_dt < now:
+                continue
+            delay_min = max(0, round((estimated_dt - planned_dt).total_seconds() / 60))
+            times.append({"time": planned_dt.strftime("%H:%M"), "delay_min": delay_min})
+            if len(times) >= cfg.max_departures:
+                break
+
+        result.append({"line": line, "direction": direction, "times": times})
+    return result
+
+
 async def _fetch_dashboard_data(
-    cache: TTLCache, http_client: httpx.AsyncClient, force_refresh: bool = False
-) -> tuple[dict, dict, list, list, list]:
+    cache: TTLCache, http_client: httpx.AsyncClient, tz: ZoneInfo, force_refresh: bool = False
+) -> tuple[dict, dict, list, list, list, list]:
     """Fetch and cache data from all sources."""
     ha_data = {}
     influx_data = {}
     calendar_data = []
     forecast_data: list = []
     sensors_display: list = []
+    departures_display: list = []
 
-    # Force refresh if requested
     if force_refresh:
-        await cache.invalidate("ha")
-        await cache.invalidate("ha_forecast")
-        await cache.invalidate("ha_sensors")
-        await cache.invalidate("influxdb")
-        await cache.invalidate("calendar")
+        for key in ("ha", "ha_forecast", "ha_sensors", "ha_departures", "influxdb", "calendar"):
+            await cache.invalidate(key)
 
-    # Fetch Home Assistant weather + forecast + configurable sensors
+    # Fetch Home Assistant weather
     ha_lock = await cache.acquire_lock("ha")
     async with ha_lock:
         ha_data = await cache.get("ha")
@@ -85,6 +134,7 @@ async def _fetch_dashboard_data(
         else:
             logger.info("Using cached HA data")
 
+    # Fetch weather forecast
     forecast_lock = await cache.acquire_lock("ha_forecast")
     async with forecast_lock:
         forecast_data = await cache.get("ha_forecast")
@@ -96,6 +146,7 @@ async def _fetch_dashboard_data(
         else:
             logger.info("Using cached forecast data")
 
+    # Fetch configurable sensor states
     if _sensor_configs:
         sensors_lock = await cache.acquire_lock("ha_sensors")
         async with sensors_lock:
@@ -110,6 +161,22 @@ async def _fetch_dashboard_data(
             else:
                 logger.info("Using cached sensor states")
         sensors_display = _build_sensors_display(_sensor_configs, sensor_entities)
+
+    # Fetch departure sensor states (short TTL — bus times update frequently)
+    if _departure_configs:
+        dep_lock = await cache.acquire_lock("ha_departures")
+        async with dep_lock:
+            dep_entities = await cache.get("ha_departures")
+            if dep_entities is None:
+                ha_client = HomeAssistantClient(settings.ha_url, settings.ha_token, http_client)
+                dep_entities = await ha_client.get_sensor_states(
+                    [d.entity_id for d in _departure_configs]
+                )
+                await cache.set("ha_departures", dep_entities, _CACHE_TTL_DEPARTURES)
+                logger.info(f"Fetched fresh departure states: {len(dep_entities)} sensors")
+            else:
+                logger.info("Using cached departure states")
+        departures_display = _build_departures_display(_departure_configs, dep_entities, tz)
 
     # Fetch InfluxDB data
     influx_lock = await cache.acquire_lock("influxdb")
@@ -148,7 +215,7 @@ async def _fetch_dashboard_data(
         else:
             logger.info("Using cached calendar data")
 
-    return ha_data, influx_data, calendar_data, forecast_data, sensors_display
+    return ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display
 
 
 @router.get("/display.bmp")
@@ -167,14 +234,15 @@ async def get_display_bmp(
     http_client: httpx.AsyncClient = app.state.http_client
 
     try:
-        ha_data, influx_data, calendar_data, forecast_data, sensors_display = (
-            await _fetch_dashboard_data(cache, http_client, force_refresh)
-        )
         tz = ZoneInfo(settings.display_timezone)
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
+            await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
+        )
         image_bytes = render_dashboard(
             ha_data, influx_data, calendar_data,
             output_format="BMP", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
+            departures_display=departures_display,
         )
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
@@ -199,14 +267,15 @@ async def get_display_png(
     http_client: httpx.AsyncClient = app.state.http_client
 
     try:
-        ha_data, influx_data, calendar_data, forecast_data, sensors_display = (
-            await _fetch_dashboard_data(cache, http_client, force_refresh)
-        )
         tz = ZoneInfo(settings.display_timezone)
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
+            await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
+        )
         image_bytes = render_dashboard(
             ha_data, influx_data, calendar_data,
             output_format="PNG", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
+            departures_display=departures_display,
         )
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:

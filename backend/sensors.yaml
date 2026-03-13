@@ -1,7 +1,22 @@
-# Sensor panel configuration
-# List the Home Assistant entities you want displayed in the top-right panel.
-# Each entry needs the entity_id from your HA instance.
+# Right-panel configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Public transport departures ───────────────────────────────────────────────
+# Each entry is a HA departure sensor (e.g. from the 9292/transitous integration).
+# The sensor state is the next departure time; attributes contain 'times' (list of
+# planned/estimated dicts), 'line_name', and 'direction'.
 #
+# max_departures: how many upcoming times to show per direction (default 4)
+# short_direction: optional abbreviation shown on the display (saves space)
+#
+departures:
+  - entity_id: sensor.aalsmeer_aalsmeer_midden_340_haarlem_station
+    short_direction: "Haarlem Stn"
+  - entity_id: sensor.aalsmeer_aalsmeer_midden_340_uithoorn_busstation
+    short_direction: "Uithoorn Bus"
+
+# ── Sensor values ─────────────────────────────────────────────────────────────
+# List the Home Assistant entities you want displayed below the departures.
 # Fields:
 #   entity_id  (required) HA entity ID, e.g. sensor.living_room_temperature
 #   label      (required) Display name shown on the dashboard
@@ -10,7 +25,7 @@
 # Binary sensors (on/off) are mapped to readable labels automatically based on
 # their device_class: door → Open/Closed, motion → Motion/Clear, etc.
 #
-# Up to ~10 sensors fit in the panel at the default font size.
+# Up to ~6 sensors fit below the departures section.
 
 sensors:
   - entity_id: sensor.temperature_living_room

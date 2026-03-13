@@ -20,18 +20,44 @@ class SensorConfig(BaseModel):
     unit: str | None = None  # If None, uses HA's unit_of_measurement
 
 
-def load_sensor_configs() -> list[SensorConfig]:
-    """Load sensor panel configuration from sensors.yaml next to this package."""
+class DepartureConfig(BaseModel):
+    """A public transport departure sensor entry from sensors.yaml."""
+
+    entity_id: str
+    short_direction: str | None = None  # Optional abbreviation for the display
+    max_departures: int = 4  # How many upcoming times to show
+
+
+def _load_yaml() -> dict:
     path = Path(__file__).parent.parent / "sensors.yaml"
     if not path.exists():
-        logger.warning(f"sensors.yaml not found at {path} — sensor panel will be empty")
-        return []
+        logger.warning(f"sensors.yaml not found at {path}")
+        return {}
     try:
         with open(path) as f:
-            data = yaml.safe_load(f)
-        return [SensorConfig(**s) for s in (data or {}).get("sensors", [])]
+            return yaml.safe_load(f) or {}
     except Exception as e:
         logger.error(f"Failed to load sensors.yaml: {e}")
+        return {}
+
+
+def load_sensor_configs() -> list[SensorConfig]:
+    """Load sensor panel configuration from sensors.yaml."""
+    data = _load_yaml()
+    try:
+        return [SensorConfig(**s) for s in data.get("sensors", [])]
+    except Exception as e:
+        logger.error(f"Invalid sensor config: {e}")
+        return []
+
+
+def load_departure_configs() -> list[DepartureConfig]:
+    """Load departure sensor configuration from sensors.yaml."""
+    data = _load_yaml()
+    try:
+        return [DepartureConfig(**d) for d in data.get("departures", [])]
+    except Exception as e:
+        logger.error(f"Invalid departure config: {e}")
         return []
 
 
