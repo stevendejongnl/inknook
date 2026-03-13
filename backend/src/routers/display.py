@@ -14,6 +14,7 @@ from src.fetchers.google_calendar import GoogleCalendarClient
 from src.fetchers.home_assistant import HomeAssistantClient
 from src.fetchers.influxdb import InfluxDBClient
 from src.services.cache import TTLCache
+from src.services.quote import QuoteContext, get_quote
 from src.services.renderer import render_dashboard
 
 _sensor_configs = load_sensor_configs()
@@ -238,11 +239,19 @@ async def get_display_bmp(
         ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
             await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
         )
+        condition = ha_data.get("state") if ha_data and "error" not in ha_data else None
+        temperature = (ha_data.get("attributes", {}).get("temperature") if ha_data else None)
+        quote = get_quote(QuoteContext(
+            today=datetime.now(tz).date(),
+            weather_condition=condition,
+            temperature=float(temperature) if temperature is not None else None,
+            language=settings.quote_language,
+        ))
         image_bytes = render_dashboard(
             ha_data, influx_data, calendar_data,
             output_format="BMP", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
-            departures_display=departures_display,
+            departures_display=departures_display, quote=quote,
         )
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
@@ -271,11 +280,19 @@ async def get_display_png(
         ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
             await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
         )
+        condition = ha_data.get("state") if ha_data and "error" not in ha_data else None
+        temperature = (ha_data.get("attributes", {}).get("temperature") if ha_data else None)
+        quote = get_quote(QuoteContext(
+            today=datetime.now(tz).date(),
+            weather_condition=condition,
+            temperature=float(temperature) if temperature is not None else None,
+            language=settings.quote_language,
+        ))
         image_bytes = render_dashboard(
             ha_data, influx_data, calendar_data,
             output_format="PNG", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
-            departures_display=departures_display,
+            departures_display=departures_display, quote=quote,
         )
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:

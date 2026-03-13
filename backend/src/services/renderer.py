@@ -95,6 +95,7 @@ def render_dashboard(
     forecast_data: list[dict[str, Any]] | None = None,
     sensors_display: list[dict[str, Any]] | None = None,
     departures_display: list[dict[str, Any]] | None = None,
+    quote: str | None = None,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -125,7 +126,7 @@ def render_dashboard(
 
     _draw_weather_panel(image, draw, ha_data, forecast_data)
     _draw_sensors_panel(image, draw, sensors_display, departures_display)
-    _draw_calendar_panel(image, draw, calendar_data, tz)
+    _draw_calendar_panel(image, draw, calendar_data, tz, quote=quote)
 
     gray = image.convert("L")
     if invert:
@@ -450,6 +451,7 @@ def _draw_calendar_panel(
     draw: ImageDraw.ImageDraw,
     calendar_data: list[dict[str, Any]] | None,
     tz: ZoneInfo,
+    quote: str | None = None,
 ) -> None:
     """
     Calendar panel: left half = today (full height), right half = next 3 days stacked.
@@ -463,6 +465,10 @@ def _draw_calendar_panel(
     top = CALENDAR_TOP + 8
     bottom = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - 4  # leave space for status bar
     mid = DISPLAY_WIDTH // 2  # 400
+
+    # Reserve bottom 38px of the Today column for the quote strip
+    QUOTE_H = 38
+    events_bottom = (bottom - QUOTE_H) if quote else bottom
 
     # Vertical divider between today and upcoming (stops at bottom bar)
     draw.line([(mid, CALENDAR_TOP), (mid, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT)], fill=0, width=1)
@@ -493,9 +499,20 @@ def _draw_calendar_panel(
         draw.text((lx, ly), "Nothing to do today", fill=0, font=FONT_TINY)
     else:
         for dt, event in today_events:
-            if ly >= bottom - 18:
+            if ly >= events_bottom - 18:
                 break
-            ly = _draw_event(draw, lx, ly, dt, event, lw, bottom)
+            ly = _draw_event(draw, lx, ly, dt, event, lw, events_bottom)
+
+    # ── Quote strip ───────────────────────────────────────────────────────────
+    if quote:
+        quote_y = bottom - QUOTE_H
+        draw.line([(lx, quote_y), (mid - 8, quote_y)], fill=0, width=1)
+        quote_y += 4
+        for line in _wrap_text(draw, quote, FONT_TINY, lw):
+            if quote_y + 16 > bottom:
+                break
+            draw.text((lx, quote_y), line, fill=0, font=FONT_TINY)
+            quote_y += 18
 
     # ── Right: Next days with events (skip empty days) ───────────────────────
     rx = mid + 8

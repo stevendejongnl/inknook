@@ -21,6 +21,7 @@ data:
   CACHE_TTL_INFLUXDB: "300"
   CACHE_TTL_CALENDAR: "3600"
   LOG_LEVEL: "INFO"
+  QUOTE_LANGUAGE: "nl"
 
 ---
 # Secret for sensitive credentials

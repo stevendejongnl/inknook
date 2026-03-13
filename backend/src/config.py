@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Display timezone (IANA name, e.g. Europe/Amsterdam)
     display_timezone: str = "Europe/Amsterdam"
 
+    # Quote language: "en" (default) or "nl"
+    quote_language: str = "en"
+
     # Invert display output (true for e-paper drivers that read 0=white, 1=black)
     display_invert: bool = True
 
