@@ -89,10 +89,10 @@ class HomeAssistantClient:
         self, entity_id: str = "weather.home"
     ) -> list[dict[str, Any]]:
         """
-        Fetch 24h hourly forecast via HA 2023.9+ service action API.
+        Fetch 24h hourly forecast via HA service action API.
 
-        POST /api/services/weather/get_forecasts
-        Body: {"entity_id": "weather.home", "type": "hourly"}
+        HA 2024.4+ requires ?return_response=true and wraps the result under
+        a "service_response" key. Older versions return the dict directly.
 
         Returns up to 24 hourly forecast dicts, or [] on failure.
         """
@@ -100,17 +100,24 @@ class HomeAssistantClient:
         payload = {"entity_id": entity_id, "type": "hourly"}
         try:
             response = await self.http_client.post(
-                url, headers=self._headers(), json=payload, timeout=10.0
+                url,
+                headers=self._headers(),
+                json=payload,
+                params={"return_response": "true"},
+                timeout=10.0,
             )
             if response.status_code == 200:
                 data = response.json()
+                # HA 2024.4+ wraps result in {"service_response": {...}}
+                if isinstance(data, dict) and "service_response" in data:
+                    data = data["service_response"]
                 forecasts = (
                     data.get(entity_id, {}).get("forecast", [])
                     or data.get("weather.home", {}).get("forecast", [])
-                )
+                ) if isinstance(data, dict) else []
                 logger.info(f"HA forecast: {len(forecasts)} hourly entries")
                 return forecasts[:24]
-            logger.warning(f"HA forecast: HTTP {response.status_code}")
+            logger.warning(f"HA forecast: HTTP {response.status_code} — {response.text[:200]}")
             return []
         except Exception as e:
             logger.warning(f"HA forecast fetch failed: {e}")
