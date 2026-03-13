@@ -1,9 +1,38 @@
 """Configuration management with environment variables."""
 
+import logging
 from base64 import b64decode
 from json import loads
+from pathlib import Path
 
+import yaml
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
+
+
+class SensorConfig(BaseModel):
+    """A single configurable sensor entry from sensors.yaml."""
+
+    entity_id: str
+    label: str
+    unit: str | None = None  # If None, uses HA's unit_of_measurement
+
+
+def load_sensor_configs() -> list[SensorConfig]:
+    """Load sensor panel configuration from sensors.yaml next to this package."""
+    path = Path(__file__).parent.parent / "sensors.yaml"
+    if not path.exists():
+        logger.warning(f"sensors.yaml not found at {path} — sensor panel will be empty")
+        return []
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+        return [SensorConfig(**s) for s in (data or {}).get("sensors", [])]
+    except Exception as e:
+        logger.error(f"Failed to load sensors.yaml: {e}")
+        return []
 
 
 class Settings(BaseSettings):

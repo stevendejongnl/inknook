@@ -32,7 +32,8 @@ RUN uv pip install \
     google-auth-httplib2>=0.2.0 \
     requests>=2.31.0 \
     influxdb-client[async]>=1.44.0 \
-    python-dotenv>=1.0.0
+    python-dotenv>=1.0.0 \
+    pyyaml>=6.0.0
 
 # Stage 2: Runtime
 FROM python:3.13-slim
@@ -48,8 +49,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
+# Copy application code and sensor config
 COPY src src
+COPY sensors.yaml sensors.yaml
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

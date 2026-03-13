@@ -84,3 +84,43 @@ class HomeAssistantClient:
                 continue
 
         return {"error": f"Failed to fetch {entity_id} after {max_retries} attempts"}
+
+    async def get_weather_forecast(
+        self, entity_id: str = "weather.home"
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch 24h hourly forecast via HA 2023.9+ service action API.
+
+        POST /api/services/weather/get_forecasts
+        Body: {"entity_id": "weather.home", "type": "hourly"}
+
+        Returns up to 24 hourly forecast dicts, or [] on failure.
+        """
+        url = f"{self.url}/api/services/weather/get_forecasts"
+        payload = {"entity_id": entity_id, "type": "hourly"}
+        try:
+            response = await self.http_client.post(
+                url, headers=self._headers(), json=payload, timeout=10.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                forecasts = (
+                    data.get(entity_id, {}).get("forecast", [])
+                    or data.get("weather.home", {}).get("forecast", [])
+                )
+                logger.info(f"HA forecast: {len(forecasts)} hourly entries")
+                return forecasts[:24]
+            logger.warning(f"HA forecast: HTTP {response.status_code}")
+            return []
+        except Exception as e:
+            logger.warning(f"HA forecast fetch failed: {e}")
+            return []
+
+    async def get_sensor_states(
+        self, entity_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Fetch multiple entity states in parallel. Returns one result per entity_id."""
+        import asyncio
+
+        tasks = [self.get_sensor_data(eid) for eid in entity_ids]
+        return list(await asyncio.gather(*tasks))

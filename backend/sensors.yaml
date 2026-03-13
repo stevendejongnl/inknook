@@ -1,0 +1,21 @@
+# Sensor panel configuration
+# List the Home Assistant entities you want displayed in the top-right panel.
+# Each entry needs the entity_id from your HA instance.
+#
+# Fields:
+#   entity_id  (required) HA entity ID, e.g. sensor.living_room_temperature
+#   label      (required) Display name shown on the dashboard
+#   unit       (optional) Override the unit; defaults to HA's unit_of_measurement
+#
+# Binary sensors (on/off) are mapped to readable labels automatically based on
+# their device_class: door → Open/Closed, motion → Motion/Clear, etc.
+#
+# Up to ~10 sensors fit in the panel at the default font size.
+
+sensors:
+  - entity_id: sensor.temperature_living_room
+    label: "Living Room"
+  - entity_id: sensor.humidity_living_room
+    label: "Humidity"
+  - entity_id: sensor.pressure_living_room
+    label: "Pressure"

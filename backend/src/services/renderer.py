@@ -2,6 +2,8 @@
 
 import io
 import logging
+import os
+import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -37,6 +39,51 @@ except Exception:
     FONT_TINY = ImageFont.load_default()
     FONT_TINY_BOLD = ImageFont.load_default()
 
+# MDI font loading
+_MDI_FONT_CACHE: dict[int, ImageFont.FreeTypeFont] = {}
+_MDI_FONT_PATH = "/tmp/inknook_mdi.ttf"
+_MDI_FONT_URL = "https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf"
+
+
+def _ensure_mdi_font(size: int) -> ImageFont.FreeTypeFont | None:
+    """Load MDI icon font at given size, downloading TTF from CDN if not cached."""
+    if size in _MDI_FONT_CACHE:
+        return _MDI_FONT_CACHE[size]
+    if not os.path.exists(_MDI_FONT_PATH):
+        try:
+            logger.info("Downloading MDI font from CDN…")
+            urllib.request.urlretrieve(_MDI_FONT_URL, _MDI_FONT_PATH)
+        except Exception as e:
+            logger.warning(f"Failed to download MDI font: {e}")
+            return None
+    try:
+        font = ImageFont.truetype(_MDI_FONT_PATH, size)
+        _MDI_FONT_CACHE[size] = font
+        return font
+    except Exception as e:
+        logger.warning(f"Failed to load MDI font: {e}")
+        return None
+
+
+# HA condition string → MDI codepoint (MDI v7)
+MDI_CONDITION_GLYPHS: dict[str, str] = {
+    "clear-night":    "\U000F0594",  # mdi:weather-night
+    "cloudy":         "\U000F0590",  # mdi:weather-cloudy
+    "exceptional":    "\U000F0026",  # mdi:alert-circle-outline
+    "fog":            "\U000F0591",  # mdi:weather-fog
+    "hail":           "\U000F0592",  # mdi:weather-hail
+    "lightning":      "\U000F0593",  # mdi:weather-lightning
+    "lightning-rainy":"\U000F067E",  # mdi:weather-lightning-rainy
+    "partlycloudy":   "\U000F0595",  # mdi:weather-partly-cloudy
+    "pouring":        "\U000F0597",  # mdi:weather-pouring
+    "rainy":          "\U000F0596",  # mdi:weather-rainy
+    "snowy":          "\U000F0F36",  # mdi:weather-snowy
+    "snowy-rainy":    "\U000F067F",  # mdi:weather-snowy-rainy
+    "sunny":          "\U000F0599",  # mdi:weather-sunny
+    "windy":          "\U000F059D",  # mdi:weather-windy
+    "windy-variant":  "\U000F059E",  # mdi:weather-windy-variant
+}
+
 
 def render_dashboard(
     ha_data: dict[str, Any] | None = None,
@@ -45,44 +92,28 @@ def render_dashboard(
     output_format: Literal["BMP", "PNG"] = "BMP",
     display_tz: ZoneInfo | None = None,
     invert: bool = True,
+    forecast_data: list[dict[str, Any]] | None = None,
+    sensors_display: list[dict[str, Any]] | None = None,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
 
-    Args:
-        ha_data: Home Assistant sensor data with temperature, humidity, condition
-        influx_data: InfluxDB aggregated data with temperature_avg, humidity_avg
-        calendar_data: List of upcoming events with summary, start, end
-        format: Output format ('BMP' or 'PNG')
-
-    Returns:
-        Image bytes in specified format
-
     Layout (800x480):
-    - Top-left (0-400px wide): Weather panel
-      - Current temperature from HA
-      - Condition (cloudy, sunny, etc.)
-      - Wind speed
-    - Top-right (400-800px wide): Sensors panel
-      - Average temperature from InfluxDB
-      - Average humidity from InfluxDB
-      - Pressure from HA
-    - Bottom (240-480px tall): Calendar panel
-      - Next 4 events with time and title
+    - Top-left  (0–400px wide, 0–240px tall): Weather panel
+      - MDI condition icon + current temperature + condition + wind
+      - 24h precipitation bar chart
+    - Top-right (400–800px wide, 0–240px tall): Configurable sensor list
+    - Middle+bottom (0–800px wide, 240–448px tall): Calendar panel
+    - Bottom bar (448–480px): reserved for ESPHome status bar
 
-    Graceful degradation:
-    - If data missing, show placeholder text
-    - If API error, show last cached data
-    - If all data missing, show "No Data Available"
+    Graceful degradation: missing data → placeholder text
     """
-    # Create white background image — must pass tuple for RGB, not int
     image = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
 
-    # Draw dividing lines
+    # Dividing lines
     draw.line([(WEATHER_WIDTH, 0), (WEATHER_WIDTH, CALENDAR_TOP)], fill=0, width=1)
     draw.line([(0, CALENDAR_TOP), (DISPLAY_WIDTH, CALENDAR_TOP)], fill=0, width=1)
-    # Separator above bottom bar (ESPHome draws the bar contents over this region)
     draw.line(
         [(0, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT), (DISPLAY_WIDTH, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT)],
         fill=0,
@@ -91,19 +122,15 @@ def render_dashboard(
 
     tz = display_tz or _DEFAULT_TZ
 
-    # Draw panels
-    _draw_weather_panel(image, draw, ha_data)
-    _draw_sensors_panel(image, draw, influx_data)
+    _draw_weather_panel(image, draw, ha_data, forecast_data)
+    _draw_sensors_panel(image, draw, sensors_display)
     _draw_calendar_panel(image, draw, calendar_data, tz)
 
-    # Convert to 1-bit. Optionally invert for e-paper drivers that read
-    # 0=white/1=black (opposite of PIL's 0=black/1=white convention).
     gray = image.convert("L")
     if invert:
         gray = ImageOps.invert(gray)
     bw_image = gray.convert("1", dither=Image.Dither.NONE)
 
-    # Save to bytes
     output = io.BytesIO()
     bw_image.save(output, format=output_format)
     output.seek(0)
@@ -111,183 +138,176 @@ def render_dashboard(
     return output.getvalue()
 
 
-def _draw_weather_panel(
-    image: Image.Image, draw: ImageDraw.ImageDraw, ha_data: dict[str, Any] | None
+def _draw_precip_chart(
+    draw: ImageDraw.ImageDraw,
+    forecast_data: list[dict[str, Any]],
+    origin_x: int = 10,
+    baseline_y: int = 220,
+    chart_w: int = 378,
+    chart_h: int = 85,
 ) -> None:
     """
-    Draw weather panel on left side of display.
+    Draw a 24h precipitation bar chart.
 
-    Args:
-        image: PIL Image to draw on
-        draw: ImageDraw object
-        ha_data: Home Assistant data (optional)
+    Bars grow upward from baseline_y. Each of the 24 hourly slots is one bar.
+    Hour labels (every 4h: 0, 4, 8, 12, 16, 20) are drawn below the baseline.
+    """
+    entries = forecast_data[:24]
+    if not entries:
+        return
 
-    Visual:
-    - Top-left box: 0-400px wide, 0-240px tall
-    - Draw border
-    - Display temperature (large)
-    - Display condition + icon (if available)
-    - Display wind speed
-    - If no data, show "Weather\nUnavailable"
+    n = len(entries)
+    bar_w = max(1, chart_w // n)
+
+    # Determine scale: max precipitation in the set, minimum 2mm so bars are visible
+    precip_values = [
+        float(e.get("precipitation", 0) or 0)
+        for e in entries
+    ]
+    max_precip = max(precip_values) if precip_values else 0
+    scale = max(max_precip, 2.0)
+
+    # Axis line
+    draw.line([(origin_x, baseline_y), (origin_x + chart_w, baseline_y)], fill=0, width=1)
+
+    # Bars
+    for i, (entry, precip) in enumerate(zip(entries, precip_values)):
+        bar_h = int((precip / scale) * chart_h)
+        x0 = origin_x + i * bar_w + 1
+        x1 = origin_x + (i + 1) * bar_w - 1
+        y0 = baseline_y - bar_h
+        y1 = baseline_y - 1
+        if bar_h > 0:
+            draw.rectangle([x0, y0, x1, y1], fill=0)
+
+    # Hour labels every 4h (parsed from datetime string "2024-01-01T14:00:00+00:00")
+    font_mdi = _ensure_mdi_font(10) or FONT_TINY
+    for i, entry in enumerate(entries):
+        if i % 4 != 0:
+            continue
+        dt_str = entry.get("datetime", "")
+        label = ""
+        try:
+            if dt_str:
+                dt = datetime.fromisoformat(dt_str)
+                label = dt.strftime("%-H")
+        except Exception:
+            label = str(i)
+        x_center = origin_x + i * bar_w + bar_w // 2
+        draw.text((x_center - 4, baseline_y + 2), label, fill=0, font=FONT_TINY)
+
+    # Scale label (max value, top-right of chart)
+    if max_precip > 0:
+        draw.text(
+            (origin_x + chart_w - 30, baseline_y - chart_h),
+            f"{max_precip:.1f}mm",
+            fill=0,
+            font=FONT_TINY,
+        )
+
+
+def _draw_weather_panel(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    ha_data: dict[str, Any] | None,
+    forecast_data: list[dict[str, Any]] | None = None,
+) -> None:
+    """
+    Draw weather panel: MDI condition icon + temp + condition text + wind,
+    then a 24h precipitation bar chart below a divider.
+
+    Panel bounds: x=0–400, y=0–240
     """
     panel_x, panel_y = 10, 10
 
     if not ha_data or "error" in ha_data:
-        draw.text(
-            (panel_x, panel_y),
-            "Weather\nUnavailable",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
+        draw.text((panel_x, panel_y), "Weather\nUnavailable", fill=0, font=FONT_MEDIUM)
         return
 
     try:
-        # Extract data from HA response
         attrs = ha_data.get("attributes", {})
         temperature = attrs.get("temperature", "N/A")
-        # Condition is the entity state, not an attribute
-        condition = ha_data.get("state", "?").replace("-", " ").capitalize()
+        condition_raw = ha_data.get("state", "")
+        condition = condition_raw.replace("-", " ").capitalize()
         wind_speed = attrs.get("wind_speed", "N/A")
-        precipitation = attrs.get("precipitation")
-        cloud_coverage = attrs.get("cloud_coverage")
+        wind_unit = attrs.get("wind_speed_unit", "km/h")
 
-        # Format temperature string
-        if isinstance(temperature, (int, float)):
-            temp_str = f"{temperature}°C"
+        temp_str = f"{temperature}°C" if isinstance(temperature, (int, float)) else str(temperature)
+
+        # MDI condition icon (72pt) at top-left
+        mdi_font = _ensure_mdi_font(72)
+        glyph = MDI_CONDITION_GLYPHS.get(condition_raw, "\U000F0590")  # fallback: cloudy
+        if mdi_font:
+            draw.text((panel_x, panel_y), glyph, fill=0, font=mdi_font)
+            text_x = panel_x + 82
         else:
-            temp_str = str(temperature)
+            text_x = panel_x
 
-        # Build rain string: prefer precipitation mm/h, fall back to cloud coverage
-        if precipitation is not None:
-            rain_str = f"Rain: {precipitation:.1f} mm"
-        elif cloud_coverage is not None:
-            rain_str = f"Clouds: {cloud_coverage:.0f}%"
+        # Temperature (large) next to icon
+        draw.text((text_x, panel_y), temp_str, fill=0, font=FONT_LARGE)
+
+        # Condition and wind below temperature
+        draw.text((text_x, panel_y + 58), condition, fill=0, font=FONT_SMALL)
+        draw.text((text_x, panel_y + 83), f"Wind: {wind_speed} {wind_unit}", fill=0, font=FONT_SMALL)
+
+        # Divider before chart
+        divider_y = panel_y + 113
+        draw.line([(panel_x, divider_y), (WEATHER_WIDTH - 10, divider_y)], fill=0, width=1)
+
+        # 24h precipitation bar chart
+        if forecast_data:
+            _draw_precip_chart(
+                draw,
+                forecast_data,
+                origin_x=panel_x,
+                baseline_y=divider_y + 95,
+                chart_w=WEATHER_WIDTH - panel_x - 10,
+                chart_h=80,
+            )
         else:
-            rain_str = "Rain: --"
+            draw.text((panel_x, divider_y + 8), "No forecast data", fill=0, font=FONT_TINY)
 
-        # Draw title
-        draw.text(
-            (panel_x, panel_y),
-            "Weather",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
-
-        # Draw temperature (large)
-        draw.text(
-            (panel_x, panel_y + 40),
-            temp_str,
-            fill=0,
-            font=FONT_LARGE,
-        )
-
-        # Draw condition
-        draw.text(
-            (panel_x, panel_y + 100),
-            condition,
-            fill=0,
-            font=FONT_SMALL,
-        )
-
-        # Draw wind speed
-        draw.text(
-            (panel_x, panel_y + 130),
-            f"Wind: {wind_speed} km/h",
-            fill=0,
-            font=FONT_SMALL,
-        )
-
-        # Draw rain/precipitation
-        draw.text(
-            (panel_x, panel_y + 160),
-            rain_str,
-            fill=0,
-            font=FONT_SMALL,
-        )
     except Exception as e:
         logger.error(f"Error drawing weather panel: {e}")
-        draw.text(
-            (panel_x, panel_y),
-            "Weather\nError",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
+        draw.text((panel_x, panel_y), "Weather\nError", fill=0, font=FONT_MEDIUM)
 
 
 def _draw_sensors_panel(
-    image: Image.Image, draw: ImageDraw.ImageDraw, influx_data: dict[str, Any] | None
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    sensors_display: list[dict[str, Any]] | None,
 ) -> None:
     """
-    Draw sensors panel on right side of display.
+    Draw configurable sensor list from sensors.yaml in the top-right panel.
 
-    Args:
-        image: PIL Image to draw on
-        draw: ImageDraw object
-        influx_data: InfluxDB aggregated data (optional)
-
-    Visual:
-    - Top-right box: 400-800px wide, 0-240px tall
-    - Draw border
-    - Display average temperature
-    - Display average humidity
-    - Display pressure
+    Each entry: {"label": str, "value": str, "unit": str}
+    Panel bounds: x=400–800, y=0–240
     """
     panel_x, panel_y = 410, 10
 
-    if not influx_data:
-        draw.text(
-            (panel_x, panel_y),
-            "Sensors\nUnavailable",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
+    draw.text((panel_x, panel_y), "Sensors", fill=0, font=FONT_MEDIUM)
+
+    if not sensors_display:
+        draw.text((panel_x, panel_y + 38), "No sensors configured", fill=0, font=FONT_TINY)
         return
 
-    try:
-        # Extract aggregated sensor data
-        temperature_avg = influx_data.get("temperature_avg", -999.0)
-        humidity_avg = influx_data.get("humidity_avg", -999.0)
+    line_h = 19
+    y = panel_y + 38
+    bottom = CALENDAR_TOP - 6
 
-        # Format strings
-        if isinstance(temperature_avg, (int, float)) and temperature_avg > -999:
-            temp_str = f"Avg Temp: {temperature_avg:.1f}°C"
-        else:
-            temp_str = "Avg Temp: N/A"
+    for sensor in sensors_display:
+        if y >= bottom:
+            break
+        label = sensor.get("label", "")
+        value = sensor.get("value", "")
+        unit = sensor.get("unit", "")
+        value_str = f"{value} {unit}".strip() if unit else value
 
-        if isinstance(humidity_avg, (int, float)) and humidity_avg > -999:
-            humid_str = f"Avg Humidity: {humidity_avg:.0f}%"
-        else:
-            humid_str = "Avg Humidity: N/A"
-
-        # Draw title
-        draw.text(
-            (panel_x, panel_y),
-            "Sensors",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
-
-        # Draw sensor values
-        draw.text(
-            (panel_x, panel_y + 50),
-            temp_str,
-            fill=0,
-            font=FONT_SMALL,
-        )
-        draw.text(
-            (panel_x, panel_y + 80),
-            humid_str,
-            fill=0,
-            font=FONT_SMALL,
-        )
-    except Exception as e:
-        logger.error(f"Error drawing sensors panel: {e}")
-        draw.text(
-            (panel_x, panel_y),
-            "Sensors\nError",
-            fill=0,
-            font=FONT_MEDIUM,
-        )
+        # Bold label, then value on same line
+        label_w = int(draw.textlength(f"{label}: ", font=FONT_TINY_BOLD)) + 1
+        draw.text((panel_x, y), f"{label}:", fill=0, font=FONT_TINY_BOLD)
+        draw.text((panel_x + label_w, y), value_str, fill=0, font=FONT_TINY)
+        y += line_h
 
 
 def _parse_event_dt(start_str: str, tz: ZoneInfo) -> datetime | None:
@@ -380,7 +400,7 @@ def _draw_calendar_panel(
     - Bold times, wrapped event names
     """
     top = CALENDAR_TOP + 8
-    bottom = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - 4  # 444px — leave space for status bar
+    bottom = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - 4  # leave space for status bar
     mid = DISPLAY_WIDTH // 2  # 400
 
     # Vertical divider between today and upcoming (stops at bottom bar)

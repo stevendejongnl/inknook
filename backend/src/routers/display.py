@@ -8,33 +8,72 @@ import httpx
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
-from src.config import settings
+from src.config import load_sensor_configs, settings
 from src.fetchers.google_calendar import GoogleCalendarClient
 from src.fetchers.home_assistant import HomeAssistantClient
 from src.fetchers.influxdb import InfluxDBClient
 from src.services.cache import TTLCache
 from src.services.renderer import render_dashboard
 
+_sensor_configs = load_sensor_configs()
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["display"])
 
 
+def _build_sensors_display(
+    sensor_configs: list, sensor_entities: list[dict]
+) -> list[dict]:
+    """Convert raw HA entity states + sensor configs into display-ready dicts."""
+    result = []
+    binary_device_class_map = {
+        "door": ("Open", "Closed"),
+        "window": ("Open", "Closed"),
+        "motion": ("Motion", "Clear"),
+        "lock": ("Unlocked", "Locked"),
+        "presence": ("Home", "Away"),
+        "occupancy": ("Occupied", "Clear"),
+        "plug": ("On", "Off"),
+        "smoke": ("Alarm", "Clear"),
+    }
+    for cfg, entity in zip(sensor_configs, sensor_entities):
+        if not entity or "error" in entity:
+            continue
+        attrs = entity.get("attributes", {})
+        raw = entity.get("state", "unavailable")
+        if raw == "unavailable":
+            result.append({"label": cfg.label, "value": "N/A", "unit": ""})
+            continue
+        unit = cfg.unit or attrs.get("unit_of_measurement", "")
+        device_class = attrs.get("device_class", "")
+        if raw in ("on", "off"):
+            on_lbl, off_lbl = binary_device_class_map.get(device_class, ("On", "Off"))
+            result.append({"label": cfg.label, "value": on_lbl if raw == "on" else off_lbl, "unit": ""})
+        else:
+            result.append({"label": cfg.label, "value": raw, "unit": unit})
+    return result
+
+
 async def _fetch_dashboard_data(
     cache: TTLCache, http_client: httpx.AsyncClient, force_refresh: bool = False
-) -> tuple[dict, dict, list]:
+) -> tuple[dict, dict, list, list, list]:
     """Fetch and cache data from all sources."""
     ha_data = {}
     influx_data = {}
     calendar_data = []
+    forecast_data: list = []
+    sensors_display: list = []
 
     # Force refresh if requested
     if force_refresh:
         await cache.invalidate("ha")
+        await cache.invalidate("ha_forecast")
+        await cache.invalidate("ha_sensors")
         await cache.invalidate("influxdb")
         await cache.invalidate("calendar")
 
-    # Fetch Home Assistant data
+    # Fetch Home Assistant weather + forecast + configurable sensors
     ha_lock = await cache.acquire_lock("ha")
     async with ha_lock:
         ha_data = await cache.get("ha")
@@ -45,6 +84,32 @@ async def _fetch_dashboard_data(
             logger.info("Fetched fresh HA data")
         else:
             logger.info("Using cached HA data")
+
+    forecast_lock = await cache.acquire_lock("ha_forecast")
+    async with forecast_lock:
+        forecast_data = await cache.get("ha_forecast")
+        if forecast_data is None:
+            ha_client = HomeAssistantClient(settings.ha_url, settings.ha_token, http_client)
+            forecast_data = await ha_client.get_weather_forecast("weather.home")
+            await cache.set("ha_forecast", forecast_data, settings.cache_ttl_ha)
+            logger.info(f"Fetched fresh forecast: {len(forecast_data)} entries")
+        else:
+            logger.info("Using cached forecast data")
+
+    if _sensor_configs:
+        sensors_lock = await cache.acquire_lock("ha_sensors")
+        async with sensors_lock:
+            sensor_entities = await cache.get("ha_sensors")
+            if sensor_entities is None:
+                ha_client = HomeAssistantClient(settings.ha_url, settings.ha_token, http_client)
+                sensor_entities = await ha_client.get_sensor_states(
+                    [s.entity_id for s in _sensor_configs]
+                )
+                await cache.set("ha_sensors", sensor_entities, settings.cache_ttl_ha)
+                logger.info(f"Fetched fresh sensor states: {len(sensor_entities)} entities")
+            else:
+                logger.info("Using cached sensor states")
+        sensors_display = _build_sensors_display(_sensor_configs, sensor_entities)
 
     # Fetch InfluxDB data
     influx_lock = await cache.acquire_lock("influxdb")
@@ -83,7 +148,7 @@ async def _fetch_dashboard_data(
         else:
             logger.info("Using cached calendar data")
 
-    return ha_data, influx_data, calendar_data
+    return ha_data, influx_data, calendar_data, forecast_data, sensors_display
 
 
 @router.get("/display.bmp")
@@ -102,15 +167,18 @@ async def get_display_bmp(
     http_client: httpx.AsyncClient = app.state.http_client
 
     try:
-        ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
-            cache, http_client, force_refresh
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display = (
+            await _fetch_dashboard_data(cache, http_client, force_refresh)
         )
         tz = ZoneInfo(settings.display_timezone)
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP", display_tz=tz, invert=settings.display_invert)
+        image_bytes = render_dashboard(
+            ha_data, influx_data, calendar_data,
+            output_format="BMP", display_tz=tz, invert=settings.display_invert,
+            forecast_data=forecast_data, sensors_display=sensors_display,
+        )
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
         logger.error(f"Error rendering BMP: {e}")
-        # Return placeholder "No Data" image
         placeholder = render_dashboard(None, None, None, output_format="BMP")
         return Response(content=placeholder, media_type="image/bmp")
 
@@ -131,14 +199,17 @@ async def get_display_png(
     http_client: httpx.AsyncClient = app.state.http_client
 
     try:
-        ha_data, influx_data, calendar_data = await _fetch_dashboard_data(
-            cache, http_client, force_refresh
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display = (
+            await _fetch_dashboard_data(cache, http_client, force_refresh)
         )
         tz = ZoneInfo(settings.display_timezone)
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG", display_tz=tz, invert=settings.display_invert)
+        image_bytes = render_dashboard(
+            ha_data, influx_data, calendar_data,
+            output_format="PNG", display_tz=tz, invert=settings.display_invert,
+            forecast_data=forecast_data, sensors_display=sensors_display,
+        )
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:
         logger.error(f"Error rendering PNG: {e}")
-        # Return placeholder "No Data" image
         placeholder = render_dashboard(None, None, None, output_format="PNG")
         return Response(content=placeholder, media_type="image/png")
