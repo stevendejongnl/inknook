@@ -2,10 +2,9 @@
 
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from src.services.renderer import render_dashboard, _draw_precip_chart
-from PIL import ImageDraw
+from src.services.renderer import _draw_precip_chart, render_dashboard
 
 
 def test_render_dashboard_output_format():

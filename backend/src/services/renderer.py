@@ -182,7 +182,6 @@ def _draw_precip_chart(
             draw.rectangle([x0, y0, x1, y1], fill=0)
 
     # Hour labels every 4h (parsed from datetime string "2024-01-01T14:00:00+00:00")
-    font_mdi = _ensure_mdi_font(10) or FONT_TINY
     for i, entry in enumerate(entries):
         if i % 4 != 0:
             continue

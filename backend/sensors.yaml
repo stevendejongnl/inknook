@@ -28,9 +28,8 @@ departures:
 # Up to ~6 sensors fit below the departures section.
 
 sensors:
-  - entity_id: sensor.temperature_living_room
-    label: "Living Room"
-  - entity_id: sensor.humidity_living_room
-    label: "Humidity"
-  - entity_id: sensor.pressure_living_room
-    label: "Pressure"
+  - entity_id: sensor.average_house_temperature
+    label: "House"
+  - entity_id: sensor.energyzero_today_energy_current_hour_price
+    label: "Electricity"
+    unit: "€/kWh"
