@@ -21,6 +21,12 @@ htmlcov/
 esphome/secrets.yaml
 esphome/.esphome/
 
+# Kubernetes manifests with credentials (local only)
+backend/kubernetes.yaml
+
+# Google service account keys
+*.json
+
 # Node
 node_modules/
 
