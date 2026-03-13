@@ -168,8 +168,8 @@ def _draw_precip_chart(
     max_precip = max(precip_values) if precip_values else 0
     scale = max(max_precip, 2.0)
 
-    # Axis line
-    draw.line([(origin_x, baseline_y), (origin_x + chart_w, baseline_y)], fill=0, width=1)
+    # Axis line (slightly thicker so it's clear at 1-bit)
+    draw.line([(origin_x, baseline_y), (origin_x + chart_w, baseline_y)], fill=0, width=2)
 
     # Bars
     for i, (entry, precip) in enumerate(zip(entries, precip_values)):
@@ -177,11 +177,12 @@ def _draw_precip_chart(
         x0 = origin_x + i * bar_w + 1
         x1 = origin_x + (i + 1) * bar_w - 1
         y0 = baseline_y - bar_h
-        y1 = baseline_y - 1
+        y1 = baseline_y - 2  # stop 2px above axis so bars don't merge into it
         if bar_h > 0:
             draw.rectangle([x0, y0, x1, y1], fill=0)
 
-    # Hour labels every 4h (parsed from datetime string "2024-01-01T14:00:00+00:00")
+    # Hour labels every 4h + scale label on the right, all in the same row
+    label_y = baseline_y + 3
     for i, entry in enumerate(entries):
         if i % 4 != 0:
             continue
@@ -194,16 +195,13 @@ def _draw_precip_chart(
         except Exception:
             label = str(i)
         x_center = origin_x + i * bar_w + bar_w // 2
-        draw.text((x_center - 4, baseline_y + 2), label, fill=0, font=FONT_TINY)
+        draw.text((x_center - 4, label_y), label, fill=0, font=FONT_TINY)
 
-    # Scale label (max value, top-right of chart)
+    # Scale label right-aligned in the time-label row (no overlap with bars)
     if max_precip > 0:
-        draw.text(
-            (origin_x + chart_w - 30, baseline_y - chart_h),
-            f"{max_precip:.1f}mm",
-            fill=0,
-            font=FONT_TINY,
-        )
+        scale_text = f"{max_precip:.1f}mm"
+        scale_w = int(draw.textlength(scale_text, font=FONT_TINY))
+        draw.text((origin_x + chart_w - scale_w, label_y), scale_text, fill=0, font=FONT_TINY)
 
 
 def _draw_weather_panel(
@@ -260,9 +258,9 @@ def _draw_weather_panel(
                 draw,
                 forecast_data,
                 origin_x=panel_x,
-                baseline_y=divider_y + 95,
+                baseline_y=divider_y + 80,  # was 95 — chart sits higher in the panel
                 chart_w=WEATHER_WIDTH - panel_x - 10,
-                chart_h=80,
+                chart_h=70,
             )
         else:
             draw.text((panel_x, divider_y + 8), "No forecast data", fill=0, font=FONT_TINY)
