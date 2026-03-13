@@ -106,7 +106,7 @@ async def get_display_bmp(
             cache, http_client, force_refresh
         )
         tz = ZoneInfo(settings.display_timezone)
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP", display_tz=tz)
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="BMP", display_tz=tz, invert=settings.display_invert)
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
         logger.error(f"Error rendering BMP: {e}")
@@ -135,7 +135,7 @@ async def get_display_png(
             cache, http_client, force_refresh
         )
         tz = ZoneInfo(settings.display_timezone)
-        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG", display_tz=tz)
+        image_bytes = render_dashboard(ha_data, influx_data, calendar_data, output_format="PNG", display_tz=tz, invert=settings.display_invert)
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:
         logger.error(f"Error rendering PNG: {e}")

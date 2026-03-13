@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 _DEFAULT_TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -43,6 +43,7 @@ def render_dashboard(
     calendar_data: list[dict[str, Any]] | None = None,
     output_format: Literal["BMP", "PNG"] = "BMP",
     display_tz: ZoneInfo | None = None,
+    invert: bool = True,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -89,10 +90,12 @@ def render_dashboard(
     _draw_sensors_panel(image, draw, influx_data)
     _draw_calendar_panel(image, draw, calendar_data, tz)
 
-    # Convert to 1-bit B/W — hard threshold, no dithering.
-    # Floyd-Steinberg would propagate error from anti-aliased font edges
-    # into the white background, creating noise across the whole image.
-    bw_image = image.convert("1", dither=Image.Dither.NONE)
+    # Convert to 1-bit. Optionally invert for e-paper drivers that read
+    # 0=white/1=black (opposite of PIL's 0=black/1=white convention).
+    gray = image.convert("L")
+    if invert:
+        gray = ImageOps.invert(gray)
+    bw_image = gray.convert("1", dither=Image.Dither.NONE)
 
     # Save to bytes
     output = io.BytesIO()
@@ -299,14 +302,60 @@ def _parse_event_dt(start_str: str, tz: ZoneInfo) -> datetime | None:
         return None
 
 
-def _day_label(d: date, tz: ZoneInfo) -> str:
-    """Return 'Today', 'Tomorrow', or short weekday + date."""
-    today = datetime.now(tz).date()
-    if d == today:
-        return f"Today  {d.strftime('%-d %b')}"
-    if d == today + timedelta(days=1):
-        return f"Tomorrow  {d.strftime('%-d %b')}"
-    return d.strftime("%a  %-d %b")
+def _wrap_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+) -> list[str]:
+    """Word-wrap text to fit within max_width pixels."""
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = (current + " " + word).strip()
+        if draw.textlength(candidate, font=font) > max_width and current:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [text]
+
+
+def _event_time_str(dt: datetime | None, start_raw: str) -> str:
+    if "T" not in start_raw:
+        return "all day"
+    return dt.strftime("%H:%M") if dt else "?"
+
+
+def _draw_event(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    dt: datetime | None,
+    event: dict[str, Any],
+    max_width: int,
+    bottom_limit: int,
+) -> int:
+    """Draw one event (bold time + wrapped name). Returns new y position."""
+    time_str = _event_time_str(dt, event.get("start", ""))
+    summary = event.get("summary", "Untitled")
+
+    time_w = int(draw.textlength(time_str, font=FONT_TINY_BOLD)) + 5
+    draw.text((x, y), time_str, fill=0, font=FONT_TINY_BOLD)
+
+    name_x = x + time_w
+    name_max = max_width - time_w
+    lines = _wrap_text(draw, summary, FONT_TINY, name_max)
+    for i, line in enumerate(lines):
+        if y >= bottom_limit:
+            break
+        draw.text((name_x if i == 0 else x + time_w, y), line, fill=0, font=FONT_TINY)
+        if i < len(lines) - 1:
+            y += 18
+    return y + 19
 
 
 def _draw_calendar_panel(
@@ -316,66 +365,79 @@ def _draw_calendar_panel(
     tz: ZoneInfo,
 ) -> None:
     """
-    Draw calendar panel across bottom of display.
+    Calendar panel: left half = today (full height), right half = next 3 days stacked.
 
-    4-column layout, one column per day (today + 3 days).
-    Each column shows a day header and up to ~8 events.
-    Times are shown in Amsterdam local time.
+    Layout:
+    - Left  (0–399px):   Today's events with text wrapping
+    - Right (401–799px): Tomorrow / day+2 / day+3 in equal thirds
+    - Vertical divider at x=400
+    - Bold times, wrapped event names
     """
-    panel_y = CALENDAR_TOP + 8
-    col_width = DISPLAY_WIDTH // 4  # 200px per column
-    row_h = 20  # pixels per event row
-    max_rows = 10  # max events per column
+    top = CALENDAR_TOP + 8
+    bottom = DISPLAY_HEIGHT - 4
+    mid = DISPLAY_WIDTH // 2  # 400
+
+    # Vertical divider between today and upcoming
+    draw.line([(mid, CALENDAR_TOP), (mid, DISPLAY_HEIGHT)], fill=0, width=1)
 
     # Group events by local date
     today = datetime.now(tz).date()
-    by_day: dict[date, list[tuple[datetime | None, dict]]] = {}
-    for i in range(4):
-        by_day[today + timedelta(days=i)] = []
-
+    by_day: dict[date, list[tuple[datetime | None, dict]]] = {
+        today + timedelta(days=i): [] for i in range(4)
+    }
     if calendar_data:
         for event in calendar_data:
             dt = _parse_event_dt(event.get("start", ""), tz)
-            if dt is None:
-                continue
-            d = dt.date()
-            if d in by_day:
-                by_day[d].append((dt, event))
+            if dt and dt.date() in by_day:
+                by_day[dt.date()].append((dt, event))
 
-    # Draw each column
-    for col, day in enumerate(sorted(by_day)):
-        col_x = col * col_width + 6
-        y = panel_y
+    # ── Left: Today ──────────────────────────────────────────────────────────
+    lx = 8
+    ly = top
+    lw = mid - lx - 8  # usable width ~384px
 
-        # Day header
-        label = _day_label(day, tz)
-        draw.text((col_x, y), label, fill=0, font=FONT_TINY_BOLD)
-        y += row_h + 2
-        # Separator line under header
-        draw.line([(col_x, y), (col_x + col_width - 10, y)], fill=0, width=1)
-        y += 4
+    draw.text((lx, ly), "Today", fill=0, font=FONT_TINY_BOLD)
+    ly += 18
+    draw.line([(lx, ly), (mid - 8, ly)], fill=0, width=1)
+    ly += 5
+
+    today_events = by_day[today]
+    if not today_events:
+        draw.text((lx, ly), "Nothing to do today", fill=0, font=FONT_TINY)
+    else:
+        for dt, event in today_events:
+            if ly >= bottom - 18:
+                break
+            ly = _draw_event(draw, lx, ly, dt, event, lw, bottom)
+
+    # ── Right: Next 3 days ───────────────────────────────────────────────────
+    rx = mid + 8
+    rw = DISPLAY_WIDTH - rx - 5  # usable width ~387px
+    section_h = (DISPLAY_HEIGHT - CALENDAR_TOP) // 3  # ~80px per section
+
+    next_days = [today + timedelta(days=i) for i in range(1, 4)]
+    for idx, day in enumerate(next_days):
+        sy = CALENDAR_TOP + idx * section_h + 6
+        sec_bottom = CALENDAR_TOP + (idx + 1) * section_h - 4
+
+        # Day label
+        if day == today + timedelta(days=1):
+            label = f"Tomorrow  {day.strftime('%-d %b')}"
+        else:
+            label = day.strftime("%A  %-d %b")
+        draw.text((rx, sy), label, fill=0, font=FONT_TINY_BOLD)
+        sy += 18
 
         events = by_day[day]
         if not events:
-            draw.text((col_x, y), "–", fill=0, font=FONT_TINY)
+            draw.text((rx, sy), "–", fill=0, font=FONT_TINY)
         else:
-            for row_idx, (dt, event) in enumerate(events[:max_rows]):
-                summary = event.get("summary", "Untitled")
-                start_raw = event.get("start", "")
-                is_allday = "T" not in start_raw
+            for dt, event in events:
+                if sy >= sec_bottom:
+                    break
+                sy = _draw_event(draw, rx, sy, dt, event, rw, sec_bottom)
 
-                if is_allday:
-                    time_str = "allday"
-                elif dt:
-                    time_str = dt.strftime("%H:%M")
-                else:
-                    time_str = "?"
-
-                # Truncate summary to fit ~23 chars in 194px @ 16px font
-                max_chars = 18
-                if len(summary) > max_chars:
-                    summary = summary[: max_chars - 1] + "…"
-
-                line = f"{time_str} {summary}"
-                draw.text((col_x, y), line, fill=0, font=FONT_TINY)
-                y += row_h
+        # Separator between sections (not after last)
+        if idx < 2:
+            sep_y = CALENDAR_TOP + (idx + 1) * section_h
+            draw.line([(rx, sep_y), (DISPLAY_WIDTH - 5, sep_y)], fill=0, width=1)
