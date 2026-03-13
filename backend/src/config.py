@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Google Calendar (base64-encoded service account JSON)
     google_service_account_json_b64: str = ""
+    google_calendar_id: str = "primary"
 
     # Cache TTLs (seconds)
     cache_ttl_ha: int = 300

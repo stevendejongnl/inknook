@@ -80,7 +80,9 @@ class GoogleCalendarClient:
 
         try:
             now = datetime.utcnow().isoformat() + "Z"
-            url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+            from src.config import settings
+            calendar_id = settings.google_calendar_id
+            url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
             params = {
                 "timeMin": now,
                 "maxResults": max_results,

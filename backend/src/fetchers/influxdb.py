@@ -52,17 +52,12 @@ class InfluxDBClient:
 
         Returns:
             Average temperature as float, or -999.0 on error
-
-        Implementation:
-        - Build Flux query: |> range(start: -{duration}) |> mean()
-        - POST to /api/v2/query
-        - Parse JSON response table data
-        - Return mean value or -999.0 on error
         """
         flux = f"""
         from(bucket: "{self.bucket}")
         |> range(start: -{duration})
-        |> filter(fn: (r) => r._measurement == "temperature")
+        |> filter(fn: (r) => r._measurement == "\u00b0C" and r._field == "value")
+        |> filter(fn: (r) => r.entity_id == "average_house_temperature")
         |> mean()
         """
         result = await self._execute_flux_query(flux)
@@ -99,7 +94,8 @@ class InfluxDBClient:
         flux = f"""
         from(bucket: "{self.bucket}")
         |> range(start: -{duration})
-        |> filter(fn: (r) => r._measurement == "humidity")
+        |> filter(fn: (r) => r._measurement == "%" and r._field == "value")
+        |> filter(fn: (r) => r.entity_id == "living_room_back_humidity")
         |> mean()
         """
         result = await self._execute_flux_query(flux)
@@ -133,7 +129,7 @@ class InfluxDBClient:
         """
         import asyncio
 
-        url = f"{self.url}/api/v2/query"
+        url = f"{self.url}/api/v2/query?org={self.org}"
         max_retries = 3
 
         for attempt in range(max_retries):

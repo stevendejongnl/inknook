@@ -8,11 +8,9 @@ esphome:
   on_boot:
     priority: 200
     then:
-      # Power up the display before SPI init
+      # Power up the display and give it time to settle before SPI init
       - output.turn_on: display_power
-      - delay: 100ms
-      # Trigger image fetch — deep sleep fires in on_download_finished / on_error
-      - component.update: dashboard_img
+      - delay: 150ms
 
 esp32:
   board: dfrobot_firebeetle2_esp32e
@@ -28,6 +26,10 @@ wifi:
   ap:
     ssid: "EPaper Fallback"
     password: !secret ota_password
+  on_connect:
+    then:
+      # Trigger image fetch once WiFi is ready
+      - component.update: dashboard_img
 
 captive_portal:
 
@@ -103,6 +105,18 @@ output:
     id: display_power
     pin: GPIO26
 
+# ── Global state ─────────────────────────────────────────────────────────────
+
+globals:
+  - id: fetch_failed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: loading
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+
 # ── HTTP + Image fetch ───────────────────────────────────────────────────────
 
 http_request:
@@ -118,12 +132,27 @@ online_image:
     update_interval: never   # Triggered manually via component.update
     on_download_finished:
       then:
+        - logger.log: "Download finished — clearing loading flag"
+        - globals.set:
+            id: loading
+            value: 'false'
+        - logger.log: "Calling component.update on display"
         - component.update: epaper_display
-        - delay: 2s   # Let the display finish its refresh cycle
+        - logger.log: "Display update returned — waiting 25s"
+        - delay: 25s
+        - logger.log: "Entering deep sleep"
         - deep_sleep.enter: main_sleep
     on_error:
       then:
-        - logger.log: "Image fetch failed — entering sleep"
+        - logger.log: "Image fetch failed — showing error screen"
+        - globals.set:
+            id: fetch_failed
+            value: 'true'
+        - globals.set:
+            id: loading
+            value: 'false'
+        - component.update: epaper_display
+        - delay: 20s  # Was 2s — must wait for 7.5" display to finish full refresh
         - deep_sleep.enter: main_sleep
 
 # ── e-Paper display ──────────────────────────────────────────────────────────
@@ -136,18 +165,41 @@ display:
     reset_pin: GPIO21
     busy_pin:
       number: GPIO14
-      inverted: true   # CRITICAL for Waveshare V2 — prevents display corruption
-    model: 7.50in-bV2
+      inverted: true
+    model: 7.50inV2
     reset_duration: 200ms
     update_interval: never   # Display is updated explicitly after image download
     lambda: |-
-      it.image(0, 0, id(dashboard_img));
+      if (id(loading)) {
+        ESP_LOGI("display", "Rendering: loading screen");
+        it.fill(COLOR_OFF);
+        it.filled_rectangle(20, 20, 60, 20);
+      } else if (id(fetch_failed)) {
+        ESP_LOGI("display", "Rendering: error screen");
+        it.fill(COLOR_OFF);
+        // Draw "no connection" symbol — WiFi arc segments with X through them
+        int cx = 400, cy = 300;
+        // Three WiFi arcs (outermost to innermost)
+        it.circle(cx, cy + 60, 120);
+        it.circle(cx, cy + 60, 80);
+        it.circle(cx, cy + 60, 40);
+        // Dot at bottom of arcs
+        it.filled_circle(cx, cy + 60, 8);
+        // Mask lower half so arcs look like the top half of a WiFi symbol
+        it.filled_rectangle(cx - 140, cy + 60, 280, 150, COLOR_OFF);
+        // X overlay — two diagonal lines
+        it.line(cx - 50, cy - 50, cx + 50, cy + 50);
+        it.line(cx + 50, cy - 50, cx - 50, cy + 50);
+      } else {
+        ESP_LOGI("display", "Rendering: dashboard image");
+        it.image(0, 0, id(dashboard_img));
+      }
 
 # ── Deep sleep ───────────────────────────────────────────────────────────────
 
 deep_sleep:
   id: main_sleep
-  run_duration: 45s      # Max awake time — enough to connect WiFi + fetch + render
+  run_duration: 120s     # Max awake time — enough to connect WiFi + fetch + render (was 90s)
   sleep_duration: 30min  # Wake every 30 min between 6 AM and midnight
 
   # Only sleep during active hours (6:00–23:59); outside that window sleep longer
