@@ -410,34 +410,39 @@ def _draw_calendar_panel(
                 break
             ly = _draw_event(draw, lx, ly, dt, event, lw, bottom)
 
-    # ── Right: Next 3 days ───────────────────────────────────────────────────
+    # ── Right: Next days with events (skip empty days) ───────────────────────
     rx = mid + 8
     rw = DISPLAY_WIDTH - rx - 5  # usable width ~387px
-    section_h = (DISPLAY_HEIGHT - CALENDAR_TOP) // 3  # ~80px per section
 
-    next_days = [today + timedelta(days=i) for i in range(1, 4)]
-    for idx, day in enumerate(next_days):
-        sy = CALENDAR_TOP + idx * section_h + 6
-        sec_bottom = CALENDAR_TOP + (idx + 1) * section_h - 4
+    # Only show days that have events
+    next_days = [
+        today + timedelta(days=i)
+        for i in range(1, 4)
+        if by_day[today + timedelta(days=i)]
+    ]
 
-        # Day label
-        if day == today + timedelta(days=1):
-            label = f"Tomorrow  {day.strftime('%-d %b')}"
-        else:
-            label = day.strftime("%A  %-d %b")
-        draw.text((rx, sy), label, fill=0, font=FONT_TINY_BOLD)
-        sy += 18
+    if not next_days:
+        draw.text((rx, top), "No upcoming events", fill=0, font=FONT_TINY)
+    else:
+        section_h = (DISPLAY_HEIGHT - CALENDAR_TOP) // len(next_days)
+        for idx, day in enumerate(next_days):
+            sy = CALENDAR_TOP + idx * section_h + 6
+            sec_bottom = CALENDAR_TOP + (idx + 1) * section_h - 4
 
-        events = by_day[day]
-        if not events:
-            draw.text((rx, sy), "–", fill=0, font=FONT_TINY)
-        else:
-            for dt, event in events:
+            # Day label
+            if day == today + timedelta(days=1):
+                label = f"Tomorrow  {day.strftime('%-d %b')}"
+            else:
+                label = day.strftime("%A  %-d %b")
+            draw.text((rx, sy), label, fill=0, font=FONT_TINY_BOLD)
+            sy += 18
+
+            for dt, event in by_day[day]:
                 if sy >= sec_bottom:
                     break
                 sy = _draw_event(draw, rx, sy, dt, event, rw, sec_bottom)
 
-        # Separator between sections (not after last)
-        if idx < 2:
-            sep_y = CALENDAR_TOP + (idx + 1) * section_h
-            draw.line([(rx, sep_y), (DISPLAY_WIDTH - 5, sep_y)], fill=0, width=1)
+            # Separator between sections (not after last)
+            if idx < len(next_days) - 1:
+                sep_y = CALENDAR_TOP + (idx + 1) * section_h
+                draw.line([(rx, sep_y), (DISPLAY_WIDTH - 5, sep_y)], fill=0, width=1)
