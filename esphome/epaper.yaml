@@ -11,6 +11,15 @@ esphome:
       # Power up the display and give it time to settle before SPI init
       - output.turn_on: display_power
       - delay: 150ms
+      # Wait for ADC to stabilize after display power-on draws current, then check battery
+      - delay: 1s
+      - component.update: battery_voltage
+      - lambda: |-
+          float v = id(battery_voltage).state;
+          // Ignore readings below 1V — ADC hasn't settled yet (spurious sample)
+          if (!isnan(v) && v > 1.0f && v < 3.3f) {
+            id(battery_low) = true;
+          }
 
 esp32:
   board: dfrobot_firebeetle2_esp32e
@@ -28,8 +37,26 @@ wifi:
     password: !secret ota_password
   on_connect:
     then:
-      # Trigger image fetch once WiFi is ready
-      - component.update: dashboard_img
+      - if:
+          condition:
+            lambda: 'return id(battery_low);'
+          then:
+            # Battery too low — show warning screen and sleep 4h instead of fetching
+            - globals.set:
+                id: loading
+                value: 'false'
+            - component.update: epaper_display
+            - delay: 25s
+            - deep_sleep.enter:
+                id: main_sleep
+                sleep_duration: 4h
+          else:
+            # Normal path — fetch dashboard image
+            - component.update: dashboard_img
+
+safe_mode:
+  num_attempts: 3        # After 3 rapid resets, boot into OTA-only mode
+  reboot_timeout: 3min   # Stay in safe mode for 3 min waiting for OTA
 
 captive_portal:
 
@@ -60,6 +87,12 @@ i2c:
   scan: true
 
 sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    id: wifi_signal_dbm
+    unit_of_measurement: "dBm"
+    update_interval: 60s
+
   - platform: bme280_i2c
     address: 0x76
     update_interval: 60s
@@ -79,10 +112,10 @@ sensor:
       unit_of_measurement: "hPa"
       accuracy_decimals: 1
 
-  # Battery voltage via ADC (GPIO35 = A2) with 1/2 voltage divider
+  # Battery voltage via ADC (GPIO34 = A2) with 1/2 voltage divider
   # Formula: raw_voltage (0–1V range at pin) × 2 = actual battery voltage
   - platform: adc
-    pin: GPIO35
+    pin: GPIO34
     name: "Battery Voltage"
     id: battery_voltage
     unit_of_measurement: "V"
@@ -91,6 +124,38 @@ sensor:
     attenuation: 12dB   # Full range: 0–3.9V
     filters:
       - multiply: 2.0   # Undo the 1/2 divider
+
+# ── Fonts ────────────────────────────────────────────────────────────────────
+
+font:
+  # Small font for bottom bar text + small MDI icons (battery, wifi, clock)
+  - file: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+    id: font_status
+    size: 16
+    extras:
+      - file: "https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf"
+        glyphs:
+          - "\U000F0079"  # mdi:battery
+          - "\U000F007B"  # mdi:battery-20
+          - "\U000F007E"  # mdi:battery-50
+          - "\U000F0081"  # mdi:battery-80
+          - "\U000F0083"  # mdi:battery-alert
+          - "\U000F05A9"  # mdi:wifi
+          - "\U000F0150"  # mdi:clock-outline
+
+  # Medium font for full-screen state body text
+  - file: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+    id: font_status_medium
+    size: 28
+
+  # Large MDI icons for full-screen states (loading / error / battery low)
+  - file: "https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_mdi_large
+    size: 120
+    glyphs:
+      - "\U000F05AA"  # mdi:wifi-off        (connection failed)
+      - "\U000F0083"  # mdi:battery-alert   (battery low)
+      - "\U000F0453"  # mdi:reload          (loading)
 
 # ── SPI (e-paper display) ────────────────────────────────────────────────────
 
@@ -116,6 +181,10 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  - id: battery_low
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 # ── HTTP + Image fetch ───────────────────────────────────────────────────────
 
@@ -170,29 +239,74 @@ display:
     reset_duration: 200ms
     update_interval: never   # Display is updated explicitly after image download
     lambda: |-
-      if (id(loading)) {
+      if (id(battery_low)) {
+        // ── Full-screen: Battery Low ──────────────────────────────────────────
+        ESP_LOGI("display", "Rendering: battery low screen");
+        it.fill(COLOR_OFF);
+        it.printf(400, 140, id(font_mdi_large), TextAlign::CENTER, "\U000F0083");
+        it.printf(400, 280, id(font_status_medium), TextAlign::CENTER, "Battery Low");
+        it.printf(400, 320, id(font_status_medium), TextAlign::CENTER, "Please charge the device");
+        if (!isnan(id(battery_voltage).state)) {
+          it.printf(400, 360, id(font_status_medium), TextAlign::CENTER, "%.2fV", id(battery_voltage).state);
+        }
+
+      } else if (id(loading)) {
+        // ── Full-screen: Loading ──────────────────────────────────────────────
         ESP_LOGI("display", "Rendering: loading screen");
         it.fill(COLOR_OFF);
-        it.filled_rectangle(20, 20, 60, 20);
+        it.printf(400, 140, id(font_mdi_large), TextAlign::CENTER, "\U000F0453");
+        it.printf(400, 280, id(font_status_medium), TextAlign::CENTER, "Loading dashboard...");
+
       } else if (id(fetch_failed)) {
-        ESP_LOGI("display", "Rendering: error screen");
+        // ── Full-screen: Connection Failed ────────────────────────────────────
+        ESP_LOGI("display", "Rendering: connection failed screen");
         it.fill(COLOR_OFF);
-        // Draw "no connection" symbol — WiFi arc segments with X through them
-        int cx = 400, cy = 300;
-        // Three WiFi arcs (outermost to innermost)
-        it.circle(cx, cy + 60, 120);
-        it.circle(cx, cy + 60, 80);
-        it.circle(cx, cy + 60, 40);
-        // Dot at bottom of arcs
-        it.filled_circle(cx, cy + 60, 8);
-        // Mask lower half so arcs look like the top half of a WiFi symbol
-        it.filled_rectangle(cx - 140, cy + 60, 280, 150, COLOR_OFF);
-        // X overlay — two diagonal lines
-        it.line(cx - 50, cy - 50, cx + 50, cy + 50);
-        it.line(cx + 50, cy - 50, cx - 50, cy + 50);
+        it.printf(400, 140, id(font_mdi_large), TextAlign::CENTER, "\U000F05AA");
+        it.printf(400, 280, id(font_status_medium), TextAlign::CENTER, "Connection Failed");
+        it.printf(400, 320, id(font_status_medium), TextAlign::CENTER, "Could not reach server");
+
       } else {
+        // ── Normal: dashboard image + bottom status bar ───────────────────────
         ESP_LOGI("display", "Rendering: dashboard image");
         it.image(0, 0, id(dashboard_img));
+
+        // Battery icon based on estimated LiPo percentage
+        float batt = id(battery_voltage).state;
+        const char* batt_icon = "\U000F0083";  // mdi:battery-alert (fallback)
+        char batt_str[8] = "?";
+        if (!isnan(batt)) {
+          int batt_pct = (int)((batt - 3.0f) / (4.2f - 3.0f) * 100.0f);
+          batt_pct = batt_pct < 0 ? 0 : (batt_pct > 100 ? 100 : batt_pct);
+          if (batt_pct <= 20)      batt_icon = "\U000F007B";  // mdi:battery-20
+          else if (batt_pct <= 50) batt_icon = "\U000F007E";  // mdi:battery-50
+          else if (batt_pct <= 80) batt_icon = "\U000F0081";  // mdi:battery-80
+          else                     batt_icon = "\U000F0079";  // mdi:battery (full)
+          snprintf(batt_str, sizeof(batt_str), "%d%%", batt_pct);
+        }
+        it.printf(8,  452, id(font_status), batt_icon);
+        it.printf(26, 452, id(font_status), batt_str);
+
+        // WiFi icon + signal quality label
+        float rssi = id(wifi_signal_dbm).state;
+        it.printf(100, 452, id(font_status), "\U000F05A9");  // mdi:wifi
+        const char* wifi_str = "---";
+        if (!isnan(rssi)) {
+          if      (rssi >= -50) wifi_str = "Excellent";
+          else if (rssi >= -60) wifi_str = "Good";
+          else if (rssi >= -70) wifi_str = "Fair";
+          else if (rssi >= -80) wifi_str = "Weak";
+          else                  wifi_str = "Poor";
+        }
+        it.printf(118, 452, id(font_status), wifi_str);
+
+        // Last update time (clock icon + HH:MM, or -- if SNTP not yet synced)
+        it.printf(390, 452, id(font_status), "\U000F0150");  // mdi:clock-outline
+        auto now = id(sntp_time).now();
+        if (now.is_valid()) {
+          it.strftime(410, 452, id(font_status), "Updated %H:%M", now);
+        } else {
+          it.printf(410, 452, id(font_status), "Updated --:--");
+        }
       }
 
 # ── Deep sleep ───────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ DISPLAY_HEIGHT = 480
 WEATHER_WIDTH = 400
 SENSORS_WIDTH = 400
 CALENDAR_TOP = 240
+BOTTOM_BAR_HEIGHT = 32  # Reserved for ESPHome-drawn status bar
 
 # Try to load a system font, fallback to default
 try:
@@ -79,9 +80,14 @@ def render_dashboard(
     draw = ImageDraw.Draw(image)
 
     # Draw dividing lines
-    draw.rectangle([0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT], outline=0, width=1)
     draw.line([(WEATHER_WIDTH, 0), (WEATHER_WIDTH, CALENDAR_TOP)], fill=0, width=1)
     draw.line([(0, CALENDAR_TOP), (DISPLAY_WIDTH, CALENDAR_TOP)], fill=0, width=1)
+    # Separator above bottom bar (ESPHome draws the bar contents over this region)
+    draw.line(
+        [(0, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT), (DISPLAY_WIDTH, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT)],
+        fill=0,
+        width=1,
+    )
 
     tz = display_tz or _DEFAULT_TZ
 
@@ -374,11 +380,11 @@ def _draw_calendar_panel(
     - Bold times, wrapped event names
     """
     top = CALENDAR_TOP + 8
-    bottom = DISPLAY_HEIGHT - 4
+    bottom = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - 4  # 444px — leave space for status bar
     mid = DISPLAY_WIDTH // 2  # 400
 
-    # Vertical divider between today and upcoming
-    draw.line([(mid, CALENDAR_TOP), (mid, DISPLAY_HEIGHT)], fill=0, width=1)
+    # Vertical divider between today and upcoming (stops at bottom bar)
+    draw.line([(mid, CALENDAR_TOP), (mid, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT)], fill=0, width=1)
 
     # Group events by local date
     today = datetime.now(tz).date()
@@ -424,7 +430,7 @@ def _draw_calendar_panel(
     if not next_days:
         draw.text((rx, top), "No upcoming events", fill=0, font=FONT_TINY)
     else:
-        section_h = (DISPLAY_HEIGHT - CALENDAR_TOP) // len(next_days)
+        section_h = (DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - CALENDAR_TOP) // len(next_days)
         for idx, day in enumerate(next_days):
             sy = CALENDAR_TOP + idx * section_h + 6
             sec_bottom = CALENDAR_TOP + (idx + 1) * section_h - 4

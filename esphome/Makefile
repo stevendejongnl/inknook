@@ -1,6 +1,6 @@
 CONFIG := epaper.yaml
-
 ESPHOME := /home/stevendejong/workspace/personal/home-automation/esphome/.venv/bin/esphome
+DEVICE_IP := $(shell grep '^device_ip:' secrets.yaml | awk '{gsub(/"/, "", $$2); print $$2}')
 
 .PHONY: flash flash-usb flash-ota compile logs validate clean dashboard
 
@@ -9,8 +9,15 @@ flash: flash-usb ## Compile and upload via USB (default)
 flash-usb: ## Compile and upload via USB (/dev/ttyUSB0)
 	$(ESPHOME) run $(CONFIG) --device /dev/ttyUSB0
 
-flash-ota: ## Compile and upload via OTA (WiFi)
-	$(ESPHOME) run $(CONFIG) --device inknook-dashboard.local
+flash-ota: ## Compile first, then prompt to hit RST before uploading via OTA
+	$(ESPHOME) compile $(CONFIG)
+	@echo ""
+	@echo "  Firmware compiled."
+	@echo "  Press RST 3x rapidly to enter safe mode (OTA-only), then hit Enter to upload ($(DEVICE_IP))..."
+	@read _
+	@echo "  Waiting for device to boot..."
+	@sleep 45
+	$(ESPHOME) upload $(CONFIG) --device $(DEVICE_IP)
 
 compile: ## Compile firmware without uploading
 	$(ESPHOME) compile $(CONFIG)
