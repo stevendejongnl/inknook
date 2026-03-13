@@ -1,7 +1,9 @@
 """InfluxDB async client for Flux queries."""
 
+import asyncio
+import csv
+import io
 import logging
-from typing import Any
 
 import httpx
 
@@ -40,8 +42,30 @@ class InfluxDBClient:
         return {
             "Authorization": f"Token {self.token}",
             "Content-Type": "application/vnd.flux",
-            "Accept": "application/json",
+            "Accept": "text/csv",
         }
+
+    def _parse_flux_csv(self, text: str) -> float | None:
+        """Extract _value from annotated CSV Flux response."""
+        reader = csv.reader(io.StringIO(text))
+        header: list[str] | None = None
+        value_idx: int | None = None
+        for row in reader:
+            if not row or row[0].startswith("#"):
+                continue
+            if header is None:
+                header = row
+                try:
+                    value_idx = header.index("_value")
+                except ValueError:
+                    return None
+                continue
+            if value_idx is not None and len(row) > value_idx:
+                try:
+                    return float(row[value_idx])
+                except (ValueError, TypeError):
+                    return None
+        return None
 
     async def query_temperature_avg(self, duration: str = "1h") -> float:
         """
@@ -60,26 +84,17 @@ class InfluxDBClient:
         |> filter(fn: (r) => r.entity_id == "average_house_temperature")
         |> mean()
         """
-        result = await self._execute_flux_query(flux)
+        csv_text = await self._execute_flux_query(flux)
 
-        if "error" in result:
-            logger.error(f"InfluxDB: Temperature query failed: {result['error']}")
+        if csv_text.startswith("error:"):
+            logger.error(f"InfluxDB: Temperature query failed: {csv_text}")
             return -999.0
 
-        try:
-            # Extract mean value from Flux response
-            if "tables" not in result or not result["tables"]:
-                return -999.0
-            table = result["tables"][0]
-            if "data" not in table or not table["data"]:
-                return -999.0
-            # Value is typically in column index 3 (after time, field, measurement)
-            value = table["data"][0][3]
-            logger.info(f"InfluxDB: Temperature avg = {value}")
-            return float(value)
-        except (IndexError, KeyError, TypeError, ValueError) as e:
-            logger.error(f"InfluxDB: Failed to parse temperature response: {e}")
+        value = self._parse_flux_csv(csv_text)
+        if value is None:
             return -999.0
+        logger.info(f"InfluxDB: Temperature avg = {value}")
+        return value
 
     async def query_humidity_avg(self, duration: str = "1h") -> float:
         """
@@ -98,37 +113,28 @@ class InfluxDBClient:
         |> filter(fn: (r) => r.entity_id == "living_room_back_humidity")
         |> mean()
         """
-        result = await self._execute_flux_query(flux)
+        csv_text = await self._execute_flux_query(flux)
 
-        if "error" in result:
-            logger.error(f"InfluxDB: Humidity query failed: {result['error']}")
+        if csv_text.startswith("error:"):
+            logger.error(f"InfluxDB: Humidity query failed: {csv_text}")
             return -999.0
 
-        try:
-            if "tables" not in result or not result["tables"]:
-                return -999.0
-            table = result["tables"][0]
-            if "data" not in table or not table["data"]:
-                return -999.0
-            value = table["data"][0][3]
-            logger.info(f"InfluxDB: Humidity avg = {value}")
-            return float(value)
-        except (IndexError, KeyError, TypeError, ValueError) as e:
-            logger.error(f"InfluxDB: Failed to parse humidity response: {e}")
+        value = self._parse_flux_csv(csv_text)
+        if value is None:
             return -999.0
+        logger.info(f"InfluxDB: Humidity avg = {value}")
+        return value
 
-    async def _execute_flux_query(self, flux: str) -> dict[str, Any]:
+    async def _execute_flux_query(self, flux: str) -> str:
         """
-        Execute Flux query and return parsed JSON.
+        Execute Flux query and return CSV text.
 
         Args:
             flux: Flux query string
 
         Returns:
-            Parsed JSON response dict, or {"error": "..."} on failure
+            Annotated CSV response text, or "error: ..." on failure
         """
-        import asyncio
-
         url = f"{self.url}/api/v2/query?org={self.org}"
         max_retries = 3
 
@@ -141,28 +147,25 @@ class InfluxDBClient:
                 )
                 if response.status_code == 200:
                     logger.info("InfluxDB: Query succeeded")
-                    return response.json()
+                    return response.text
                 elif response.status_code >= 500:
                     logger.warning(
                         f"InfluxDB: Got {response.status_code}, retrying..."
                     )
                     if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
-                        await asyncio.sleep(wait_time)
+                        await asyncio.sleep(2**attempt)
                     continue
                 else:
-                    return {"error": f"HTTP {response.status_code}"}
+                    return f"error: HTTP {response.status_code}"
             except TimeoutError:
                 logger.warning("InfluxDB: Timeout, retrying...")
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    await asyncio.sleep(wait_time)
+                    await asyncio.sleep(2**attempt)
                 continue
             except Exception as e:
                 logger.error(f"InfluxDB: Exception: {e}")
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    await asyncio.sleep(wait_time)
+                    await asyncio.sleep(2**attempt)
                 continue
 
-        return {"error": f"Failed after {max_retries} attempts"}
+        return f"error: Failed after {max_retries} attempts"
