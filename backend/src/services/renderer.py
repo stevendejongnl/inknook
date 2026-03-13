@@ -467,8 +467,8 @@ def _draw_calendar_panel(
     mid = DISPLAY_WIDTH // 2  # 400
 
     # Reserve bottom 38px of the Today column for the quote strip
-    QUOTE_H = 38
-    events_bottom = (bottom - QUOTE_H) if quote else bottom
+    quote_h = 38
+    events_bottom = (bottom - quote_h) if quote else bottom
 
     # Vertical divider between today and upcoming (stops at bottom bar)
     draw.line([(mid, CALENDAR_TOP), (mid, DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT)], fill=0, width=1)
@@ -505,7 +505,7 @@ def _draw_calendar_panel(
 
     # ── Quote strip ───────────────────────────────────────────────────────────
     if quote:
-        quote_y = bottom - QUOTE_H
+        quote_y = bottom - quote_h
         draw.line([(lx, quote_y), (mid - 8, quote_y)], fill=0, width=1)
         quote_y += 4
         for line in _wrap_text(draw, quote, FONT_TINY, lw):
