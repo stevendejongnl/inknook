@@ -54,6 +54,10 @@ spec:
     metadata:
       labels:
         app: inknook-backend
+      annotations:
+        keel.sh/policy: force          # redeploy whenever :latest digest changes
+        keel.sh/trigger: poll
+        keel.sh/pollSchedule: "@every 5m"
     spec:
       securityContext:
         runAsNonRoot: true

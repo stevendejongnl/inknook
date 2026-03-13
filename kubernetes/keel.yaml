@@ -1,0 +1,131 @@
+---
+# Keel — Kubernetes Operator for automatic image updates
+# https://keel.sh
+#
+# Deploy once to the cluster:
+#   kubectl apply -f kubernetes/keel.yaml
+#
+# Then annotate any Deployment to opt in:
+#   keel.sh/policy: force          # always redeploy when :latest changes digest
+#   keel.sh/trigger: poll          # use polling (not webhooks)
+#   keel.sh/pollSchedule: "@every 5m"
+#
+# Example annotation block to add to a Deployment's spec.template.metadata:
+#   annotations:
+#     keel.sh/policy: force
+#     keel.sh/trigger: poll
+#     keel.sh/pollSchedule: "@every 5m"
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keel
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keel
+  namespace: keel
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: keel
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps", "extensions"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: keel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: keel
+subjects:
+  - kind: ServiceAccount
+    name: keel
+    namespace: keel
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keel
+  namespace: keel
+  labels:
+    app: keel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keel
+  template:
+    metadata:
+      labels:
+        app: keel
+    spec:
+      serviceAccountName: keel
+      containers:
+        - name: keel
+          image: keelhq/keel:latest
+          imagePullPolicy: Always
+          command: ["/bin/keel"]
+          env:
+            # Watch all namespaces (empty string = cluster-wide)
+            - name: NAMESPACE
+              value: ""
+            # Disable the built-in webhook server (not needed for poll-only usage)
+            - name: WEBHOOK_ENDPOINT
+              value: ""
+          ports:
+            - name: http
+              containerPort: 9300
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody
