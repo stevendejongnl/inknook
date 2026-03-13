@@ -95,6 +95,9 @@ spec:
             # Watch all namespaces (empty string = cluster-wide)
             - name: NAMESPACE
               value: ""
+            # Enable polling trigger (required for keel.sh/trigger: poll to work)
+            - name: POLL
+              value: "1"
             # Disable the built-in webhook server (not needed for poll-only usage)
             - name: WEBHOOK_ENDPOINT
               value: ""

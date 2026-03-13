@@ -205,6 +205,11 @@ online_image:
         - globals.set:
             id: loading
             value: 'false'
+        - logger.log: "Waiting for SNTP sync before render"
+        - wait_until:
+            condition:
+              lambda: 'return id(sntp_time).now().is_valid();'
+            timeout: 10s
         - logger.log: "Calling component.update on display"
         - component.update: epaper_display
         - logger.log: "Display update returned — waiting 25s"
@@ -299,13 +304,20 @@ display:
         }
         it.printf(118, 452, id(font_status), wifi_str);
 
-        // Last update time (clock icon + HH:MM, or -- if SNTP not yet synced)
-        it.printf(390, 452, id(font_status), "\U000F0150");  // mdi:clock-outline
+        // Last update time — clock icon right after WiFi label
+        it.printf(210, 452, id(font_status), "\U000F0150");  // mdi:clock-outline
         auto now = id(sntp_time).now();
         if (now.is_valid()) {
-          it.strftime(410, 452, id(font_status), "Updated %H:%M", now);
+          it.strftime(228, 452, id(font_status), "Updated %H:%M", now);
+          // Next update = now + 30 min (right-aligned)
+          time_t next_t = now.timestamp + 30 * 60;
+          struct tm *next_tm = localtime(&next_t);
+          char next_buf[16];
+          strftime(next_buf, sizeof(next_buf), "%H:%M", next_tm);
+          it.printf(792, 452, id(font_status), TextAlign::RIGHT, "Next %s", next_buf);
         } else {
-          it.printf(410, 452, id(font_status), "Updated --:--");
+          it.printf(228, 452, id(font_status), "Updated --:--");
+          it.printf(792, 452, id(font_status), TextAlign::RIGHT, "Next --:--");
         }
       }
 
