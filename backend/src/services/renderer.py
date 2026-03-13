@@ -197,11 +197,12 @@ def _draw_precip_chart(
         x_center = origin_x + i * bar_w + bar_w // 2
         draw.text((x_center - 4, label_y), label, fill=0, font=FONT_TINY)
 
-    # Scale label right-aligned in the time-label row (no overlap with bars)
+    # Scale label top-right of chart area (above bars, not in the time-label row)
     if max_precip > 0:
         scale_text = f"{max_precip:.1f}mm"
         scale_w = int(draw.textlength(scale_text, font=FONT_TINY))
-        draw.text((origin_x + chart_w - scale_w, label_y), scale_text, fill=0, font=FONT_TINY)
+        scale_y = baseline_y - chart_h - 1
+        draw.text((origin_x + chart_w - scale_w, scale_y), scale_text, fill=0, font=FONT_TINY)
 
 
 def _draw_weather_panel(
