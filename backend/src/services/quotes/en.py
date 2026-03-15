@@ -10,24 +10,24 @@ def holiday_quote(today: date) -> str | None:
     e = easter(y)
 
     holidays: dict[date, str] = {
-        date(y, 1, 1):  "Happy New Year! A fresh start full of possibilities!",
-        date(y, 2, 14): "Happy Valentine's Day! You make every day special",
-        date(y, 3, 8):  "Happy International Women's Day! The world is better with you in it",
-        date(y, 3, 17): "Happy St. Patrick's Day! May the luck be with you today",
-        date(y, 4, 1):  "April Fools'! Don't believe everything you read today",
-        date(y, 5, 1):  "Labour Day! A great day to... rest",
-        date(y, 10, 31):"Happy Halloween! You're the least scary thing around",
-        date(y, 12, 24):"Christmas Eve! The excitement is real",
-        date(y, 12, 25):"Merry Christmas! Wishing you a lovely day",
-        date(y, 12, 26):"Boxing Day! A bonus holiday — enjoy every minute",
-        date(y, 12, 31):"New Year's Eve! What a year — here's to the next one!",
+        date(y, 1, 1):  "A new year — a blank page. Write something good.",
+        date(y, 2, 14): "Love is in the small things, not just the grand gestures.",
+        date(y, 3, 8):  "The world is richer for the women who shaped it.",
+        date(y, 3, 17): "A little luck never hurts. Today seems like a good day for it.",
+        date(y, 4, 1):  "Not everything is as it seems. Sometimes that is a gift.",
+        date(y, 5, 1):  "Rest is also a form of work. Today, lean into it.",
+        date(y, 10, 31):"The dark has its own kind of charm.",
+        date(y, 12, 24):"The anticipation is half the magic.",
+        date(y, 12, 25):"The best gift is being exactly where you are.",
+        date(y, 12, 26):"Two days of stillness. That is a rare thing.",
+        date(y, 12, 31):"One more lap around the sun. Not bad at all.",
         # Moveable feasts
-        e - timedelta(days=2): "Good Friday — a good day for a good cup of coffee",
-        e:                      "Happy Easter! Hope your day is egg-cellent",
-        e + timedelta(days=1):  "Easter Monday! A bonus day off — you earned it",
-        e + timedelta(days=39): "Ascension Day! Long weekend incoming",
-        e + timedelta(days=49): "Whit Sunday! Enjoy the long weekend",
-        e + timedelta(days=50): "Whit Monday! One more free day — make the most of it",
+        e - timedelta(days=2): "Some days ask for quiet. This is one of them.",
+        e:                      "Every spring is a reminder that things come back.",
+        e + timedelta(days=1):  "A bonus day of ease. Take it gently.",
+        e + timedelta(days=39): "A long weekend is its own small holiday.",
+        e + timedelta(days=49): "A pause in the middle of things is a gift.",
+        e + timedelta(days=50): "One more day to breathe. Use it well.",
     }
 
     return holidays.get(today)
@@ -44,45 +44,45 @@ def weather_quote(condition: str | None, temperature: float | None, today: date)
 
     if condition == "sunny" and temperature is not None and temperature >= 25:
         return pick([
-            "Gorgeous day! Get outside and soak it up",
-            "It's scorching! Ice cream is basically required today",
-            "Perfect beach weather — or at least garden weather!",
+            "The sun is generous today — take a little of it with you.",
+            "Heat like this asks to be respected. Drink water. Go slow.",
+            "A day this bright deserves to be noticed.",
         ])
 
     if condition in ("sunny", "partlycloudy") and temperature is not None and temperature >= 18:
         return pick([
-            "What a lovely day! A walk would be perfect",
-            "Beautiful weather — no excuses to stay inside",
-            "Good weather for a good mood",
+            "A good day for a slow walk and no particular destination.",
+            "The weather is doing its part. The rest is up to you.",
+            "Good light makes everything look a little more hopeful.",
         ])
 
     if condition in ("rainy", "pouring", "lightning-rainy"):
         return pick([
-            "Rainy day — ideal excuse for tea and a book",
-            "It's pouring! Perfect for staying cozy inside",
-            "Wet outside, warm inside — sounds like a plan",
+            "Rain clears the air. Sometimes that is enough.",
+            "A rainy day has a quietness that is worth sitting with.",
+            "The rain has no agenda. Neither do you, for a moment.",
         ])
 
     if condition in ("snowy", "snowy-rainy"):
         return pick([
-            "Snow day! Hot chocolate is absolutely mandatory",
-            "It's snowing! Hope there's a warm blanket nearby",
+            "Snow turns the familiar into something new.",
+            "Everything looks softer under snow.",
         ])
 
     if condition == "lightning":
         return pick([
-            "Storm incoming! Stay cozy indoors",
+            "Some days, nature has the last word.",
         ])
 
     if condition == "fog":
         return pick([
-            "Foggy morning — take it slow today",
+            "On foggy days, the world keeps some things for itself.",
         ])
 
     if condition in ("windy", "windy-variant"):
         return pick([
-            "Hold onto your hat — it's breezy out there!",
-            "Windy day! Perfect excuse to stay in",
+            "The wind moves things along. Maybe you can too.",
+            "A breezy day — good for clearing the head.",
         ])
 
     return None
@@ -90,41 +90,41 @@ def weather_quote(condition: str | None, temperature: float | None, today: date)
 
 _BY_WEEKDAY: dict[int, list[str]] = {
     0: [  # Monday
-        "New week, new adventures! You've got this",
-        "Monday again? Time flies when you're having fun",
-        "The week is young — and so are you!",
-        "Four more days until Friday — let's go!",
+        "A quiet start is still a start.",
+        "Mondays have a bad reputation they do not deserve.",
+        "The week begins. That is already something.",
+        "Every week is a fresh attempt. This one too.",
     ],
     1: [  # Tuesday
-        "Tuesday! One day down, already winning",
-        "Two days in — you're crushing it!",
-        "Tuesday is just Monday's cooler sibling",
+        "Tuesday is the week finding its footing.",
+        "One day in, and still going. That counts.",
+        "Tuesdays ask for no special fanfare. Just steady.",
     ],
     2: [  # Wednesday
-        "Hump day! Downhill from here",
-        "Wednesday — basically Friday-eve-eve",
-        "Halfway there! You're doing great",
+        "Halfway through. Exactly where you need to be.",
+        "Wednesday is a good day to pause and take stock.",
+        "The week has rhythm. Today is part of it.",
     ],
     3: [  # Thursday
-        "Almost Friday! One more sleep...",
-        "Thursday: the pre-pre-weekend has arrived",
-        "So close to Friday you can almost taste it",
+        "Almost there, without rushing.",
+        "Thursday has a quiet confidence about it.",
+        "The end of the week is near. Hold the thread.",
     ],
     4: [  # Friday
-        "IT'S FRIDAY!! You made it!",
-        "TGIF! You absolutely deserve this weekend",
-        "Friday! The best invention of the week",
-        "The weekend called — it's on its way!",
+        "The week taught you something. Carry it lightly.",
+        "Friday is a gentle close, not just a finish line.",
+        "A week well lived. That is worth something.",
+        "The weekend begins at the edges of Friday. Let it.",
     ],
     5: [  # Saturday
-        "Weekend! Do whatever you want — you earned it",
-        "Saturday vibes: no alarm, no rush, no problem",
-        "It's Saturday — the world is your oyster",
+        "Rest is not laziness. It is wisdom.",
+        "Saturday has no obligations. That is the point.",
+        "A day with nowhere to be is a rare gift.",
     ],
     6: [  # Sunday
-        "Sunday: the original lazy day",
-        "Soak up Sunday — tomorrow is another story",
-        "Sunday mode: ON. Enjoy every minute",
+        "Sunday light is its own kind of soft.",
+        "A slow Sunday morning is one of life's small luxuries.",
+        "Let Sunday be what it is — unhurried.",
     ],
 }
 
