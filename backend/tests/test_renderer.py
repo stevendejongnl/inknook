@@ -1,6 +1,6 @@
 """Tests for dashboard renderer."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from zoneinfo import ZoneInfo
 
@@ -301,7 +301,7 @@ def test_render_dashboard_no_invert():
 
 def test_render_dashboard_with_sun_data():
     """Test rendering with sun rise/set data."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     sun_data = {
         "attributes": {
             "next_rising": (now + timedelta(hours=6)).isoformat(),
@@ -469,7 +469,6 @@ def test_precip_chart_invalid_datetime():
 
 def test_render_dashboard_with_calendar_next_days():
     """Calendar with events in tomorrow and day+2 exercises the next-days section."""
-    from datetime import date as date_cls
     today = datetime.now(ZoneInfo("UTC")).date()
     tomorrow = today + timedelta(days=1)
     day2 = today + timedelta(days=2)
@@ -519,7 +518,7 @@ def test_render_dashboard_with_today_events():
 
 def test_render_dashboard_sun_arc_sunset_before_sunrise():
     """Sun data where sunset < sunrise exercises the day-shift branch (line 337)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # next_setting is before next_rising — triggers sunset -= timedelta(days=1)
     sun_data = {
         "attributes": {
@@ -534,7 +533,7 @@ def test_render_dashboard_sun_arc_sunset_before_sunrise():
 
 def test_render_dashboard_sun_arc_far_future_sunrise():
     """Sunrise > now + 18h triggers roll-back-one-day branch (lines 340-341)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # next_rising is more than 18h in the future
     sun_data = {
         "attributes": {

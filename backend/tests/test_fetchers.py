@@ -1,16 +1,14 @@
 """Tests for fetcher clients (HA, InfluxDB, Google Calendar)."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
+from src.fetchers.google_calendar import GoogleCalendarClient
 from src.fetchers.home_assistant import HomeAssistantClient
 from src.fetchers.influxdb import InfluxDBClient
-from src.fetchers.google_calendar import GoogleCalendarClient
 from tests.conftest import make_transport
-
 
 # ── HomeAssistantClient ────────────────────────────────────────────────────────
 

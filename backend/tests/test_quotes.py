@@ -4,9 +4,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from src.services.quotes._utils import easter
 from src.services.quotes import en, nl
-
+from src.services.quotes._utils import easter
 
 # ── Easter algorithm ───────────────────────────────────────────────────────────
 

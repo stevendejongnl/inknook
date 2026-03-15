@@ -2,7 +2,6 @@
 
 import base64
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +15,6 @@ from src.config import (
     load_departure_configs,
     load_sensor_configs,
 )
-
 
 # ── _load_yaml ─────────────────────────────────────────────────────────────────
 

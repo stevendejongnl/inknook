@@ -1,6 +1,6 @@
 """Tests for API routers."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -190,7 +190,7 @@ def test_build_sensors_empty_entity():
 
 def test_build_departures_happy_path():
     tz = ZoneInfo("UTC")
-    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    future = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
     cfgs = [DepartureConfig(entity_id="sensor.bus", short_direction="CS")]
     entities = [{"attributes": {
         "line_name": "340",
@@ -206,7 +206,7 @@ def test_build_departures_happy_path():
 
 def test_build_departures_uses_entity_direction_when_no_short():
     tz = ZoneInfo("UTC")
-    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    future = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
     cfgs = [DepartureConfig(entity_id="sensor.bus")]
     entities = [{"attributes": {
         "line_name": "340",
@@ -219,7 +219,7 @@ def test_build_departures_uses_entity_direction_when_no_short():
 
 def test_build_departures_past_skipped():
     tz = ZoneInfo("UTC")
-    past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    past = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     cfgs = [DepartureConfig(entity_id="sensor.bus")]
     entities = [{"attributes": {
         "line_name": "1", "direction": "A",
@@ -249,7 +249,7 @@ def test_build_departures_error_entity_skipped():
 
 def test_build_departures_delay_calculation():
     tz = ZoneInfo("UTC")
-    planned = datetime.now(timezone.utc) + timedelta(minutes=10)
+    planned = datetime.now(UTC) + timedelta(minutes=10)
     estimated = planned + timedelta(minutes=3)
     cfgs = [DepartureConfig(entity_id="sensor.bus")]
     entities = [{"attributes": {
@@ -263,7 +263,7 @@ def test_build_departures_delay_calculation():
 def test_build_departures_max_departures_respected():
     tz = ZoneInfo("UTC")
     times = [
-        {"planned": (datetime.now(timezone.utc) + timedelta(minutes=i + 5)).isoformat()}
+        {"planned": (datetime.now(UTC) + timedelta(minutes=i + 5)).isoformat()}
         for i in range(10)
     ]
     cfgs = [DepartureConfig(entity_id="sensor.bus", max_departures=3)]
