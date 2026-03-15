@@ -319,10 +319,8 @@ def _draw_weather_panel(
         draw.text((text_x, panel_y + 58), condition, fill=0, font=FONT_SMALL)
         draw.text((text_x, panel_y + 83), f"Wind: {wind_speed} {wind_unit}", fill=0, font=FONT_SMALL)
 
-        # Sun arc (if sun data available)
-        sun_arc_h = 36
-        sun_arc_y = panel_y + 108
-
+        # Sun rise/set row (if sun data available)
+        sun_row_y = panel_y + 108
         sun_attrs = (sun_data or {}).get("attributes", {})
         rise_str = sun_attrs.get("next_rising")
         set_str = sun_attrs.get("next_setting")
@@ -331,34 +329,36 @@ def _draw_weather_panel(
                 sunrise = datetime.fromisoformat(rise_str).astimezone(_tz)
                 sunset = datetime.fromisoformat(set_str).astimezone(_tz)
                 now = datetime.now(_tz)
-                # next_rising/next_setting are always "next" — if sunset is before sunrise,
-                # we're currently past midnight and sunrise is tomorrow; shift sunset back 1 day
                 if sunset < sunrise:
                     sunset -= timedelta(days=1)
-                # If sunrise is in the future (i.e. before today's sunrise), roll both back
                 if sunrise > now + timedelta(hours=18):
                     sunrise -= timedelta(days=1)
                     sunset -= timedelta(days=1)
-                _draw_sun_arc(
-                    draw, sunrise, sunset, now,
-                    origin_x=panel_x,
-                    origin_y=sun_arc_y,
-                    width=WEATHER_WIDTH - panel_x - 10,
-                    height=sun_arc_h,
-                )
-                divider_y = sun_arc_y + sun_arc_h + 4
+                mdi_sm = _ensure_mdi_font(20)
+                sunrise_glyph = "\U000F059B"   # mdi:weather-sunset-up
+                sunset_glyph  = "\U000F059C"   # mdi:weather-sunset-down
+                rise_time = sunrise.strftime("%H:%M")
+                set_time  = sunset.strftime("%H:%M")
+                x = panel_x
+                if mdi_sm:
+                    draw.text((x, sun_row_y), sunrise_glyph, fill=0, font=mdi_sm)
+                    x += 22
+                draw.text((x, sun_row_y + 2), rise_time, fill=0, font=FONT_TINY)
+                x += int(draw.textlength(rise_time, font=FONT_TINY)) + 12
+                if mdi_sm:
+                    draw.text((x, sun_row_y), sunset_glyph, fill=0, font=mdi_sm)
+                    x += 22
+                draw.text((x, sun_row_y + 2), set_time, fill=0, font=FONT_TINY)
             except Exception as e:
-                logger.warning(f"Could not draw sun arc: {e}")
-                divider_y = panel_y + 113
-        else:
-            divider_y = panel_y + 113
+                logger.warning(f"Could not draw sun row: {e}")
 
         # Divider before chart
+        divider_y = sun_row_y + 24
         draw.line([(panel_x, divider_y), (WEATHER_WIDTH - 10, divider_y)], fill=0, width=1)
 
         # 24h precipitation bar chart
-        chart_baseline = divider_y + 75
-        chart_h = min(70, CALENDAR_TOP - chart_baseline - 15)
+        chart_baseline = CALENDAR_TOP - 20
+        chart_h = chart_baseline - divider_y - 10
         if forecast_data and chart_h > 10:
             _draw_precip_chart(
                 draw,
