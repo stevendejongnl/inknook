@@ -1,7 +1,12 @@
 """Tests for API routers."""
 
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 import pytest
 
+from src.config import DepartureConfig, SensorConfig
+from src.routers.display import _build_departures_display, _build_sensors_display
 from src.services.cache import TTLCache
 
 
@@ -94,3 +99,174 @@ async def test_cache_status_persists_across_requests(client, app):
     response2 = client.get("/cache/status")
     assert "test" in response2.json()
     assert response1.json()["test"]["expires_at"] == response2.json()["test"]["expires_at"]
+
+
+# ── _build_sensors_display ─────────────────────────────────────────────────────
+
+def test_build_sensors_happy_path():
+    cfgs = [SensorConfig(entity_id="sensor.temp", label="Temp")]
+    entities = [{"state": "21.5", "attributes": {"unit_of_measurement": "°C"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result == [{"label": "Temp", "value": "21.5", "unit": "°C"}]
+
+
+def test_build_sensors_error_skipped():
+    cfgs = [SensorConfig(entity_id="sensor.temp", label="Temp")]
+    entities = [{"error": "timeout"}]
+    assert _build_sensors_display(cfgs, entities) == []
+
+
+def test_build_sensors_unavailable():
+    cfgs = [SensorConfig(entity_id="sensor.temp", label="Temp")]
+    entities = [{"state": "unavailable", "attributes": {}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["value"] == "N/A"
+    assert result[0]["unit"] == ""
+
+
+def test_build_sensors_binary_known_device_class():
+    cfgs = [SensorConfig(entity_id="binary_sensor.door", label="Door")]
+    entities = [{"state": "on", "attributes": {"device_class": "door"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["value"] == "Open"
+
+
+def test_build_sensors_binary_off_known_device_class():
+    cfgs = [SensorConfig(entity_id="binary_sensor.door", label="Door")]
+    entities = [{"state": "off", "attributes": {"device_class": "door"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["value"] == "Closed"
+
+
+def test_build_sensors_binary_unknown_device_class():
+    cfgs = [SensorConfig(entity_id="binary_sensor.x", label="X")]
+    entities = [{"state": "off", "attributes": {"device_class": "unknown"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["value"] == "Off"
+
+
+def test_build_sensors_binary_on_unknown_device_class():
+    cfgs = [SensorConfig(entity_id="binary_sensor.x", label="X")]
+    entities = [{"state": "on", "attributes": {"device_class": "unknown"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["value"] == "On"
+
+
+def test_build_sensors_custom_unit_override():
+    cfgs = [SensorConfig(entity_id="sensor.temp", label="Temp", unit="F")]
+    entities = [{"state": "72", "attributes": {"unit_of_measurement": "°C"}}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result[0]["unit"] == "F"  # cfg.unit overrides HA unit
+
+
+def test_build_sensors_all_device_classes():
+    # These all map to specific labels (not the generic On/Off fallback)
+    non_on_off = {
+        "door": ("Open", "Closed"),
+        "window": ("Open", "Closed"),
+        "motion": ("Motion", "Clear"),
+        "lock": ("Unlocked", "Locked"),
+        "presence": ("Home", "Away"),
+        "occupancy": ("Occupied", "Clear"),
+        "smoke": ("Alarm", "Clear"),
+    }
+    for dc, (on_lbl, _) in non_on_off.items():
+        cfgs = [SensorConfig(entity_id=f"binary_sensor.{dc}", label=dc.capitalize())]
+        entities = [{"state": "on", "attributes": {"device_class": dc}}]
+        result = _build_sensors_display(cfgs, entities)
+        assert len(result) == 1
+        assert result[0]["value"] == on_lbl
+
+
+def test_build_sensors_empty_entity():
+    """Empty entity dict is falsy → treated as missing, skipped."""
+    cfgs = [SensorConfig(entity_id="sensor.temp", label="Temp")]
+    entities = [{}]
+    result = _build_sensors_display(cfgs, entities)
+    assert result == []
+
+
+# ── _build_departures_display ──────────────────────────────────────────────────
+
+def test_build_departures_happy_path():
+    tz = ZoneInfo("UTC")
+    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    cfgs = [DepartureConfig(entity_id="sensor.bus", short_direction="CS")]
+    entities = [{"attributes": {
+        "line_name": "340",
+        "direction": "Haarlem",
+        "times": [{"planned": future}]
+    }}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert len(result) == 1
+    assert result[0]["line"] == "340"
+    assert result[0]["direction"] == "CS"  # short_direction override
+    assert len(result[0]["times"]) == 1
+
+
+def test_build_departures_uses_entity_direction_when_no_short():
+    tz = ZoneInfo("UTC")
+    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    cfgs = [DepartureConfig(entity_id="sensor.bus")]
+    entities = [{"attributes": {
+        "line_name": "340",
+        "direction": "Haarlem Station",
+        "times": [{"planned": future}]
+    }}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert result[0]["direction"] == "Haarlem Station"
+
+
+def test_build_departures_past_skipped():
+    tz = ZoneInfo("UTC")
+    past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    cfgs = [DepartureConfig(entity_id="sensor.bus")]
+    entities = [{"attributes": {
+        "line_name": "1", "direction": "A",
+        "times": [{"planned": past}]
+    }}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert result[0]["times"] == []
+
+
+def test_build_departures_invalid_iso_skipped():
+    tz = ZoneInfo("UTC")
+    cfgs = [DepartureConfig(entity_id="sensor.bus")]
+    entities = [{"attributes": {
+        "line_name": "1", "direction": "A",
+        "times": [{"planned": "not-a-date"}]
+    }}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert result[0]["times"] == []
+
+
+def test_build_departures_error_entity_skipped():
+    tz = ZoneInfo("UTC")
+    cfgs = [DepartureConfig(entity_id="sensor.bus")]
+    entities = [{"error": "timeout"}]
+    assert _build_departures_display(cfgs, entities, tz) == []
+
+
+def test_build_departures_delay_calculation():
+    tz = ZoneInfo("UTC")
+    planned = datetime.now(timezone.utc) + timedelta(minutes=10)
+    estimated = planned + timedelta(minutes=3)
+    cfgs = [DepartureConfig(entity_id="sensor.bus")]
+    entities = [{"attributes": {
+        "line_name": "1", "direction": "A",
+        "times": [{"planned": planned.isoformat(), "estimated": estimated.isoformat()}]
+    }}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert result[0]["times"][0]["delay_min"] == 3
+
+
+def test_build_departures_max_departures_respected():
+    tz = ZoneInfo("UTC")
+    times = [
+        {"planned": (datetime.now(timezone.utc) + timedelta(minutes=i + 5)).isoformat()}
+        for i in range(10)
+    ]
+    cfgs = [DepartureConfig(entity_id="sensor.bus", max_departures=3)]
+    entities = [{"attributes": {"line_name": "1", "direction": "A", "times": times}}]
+    result = _build_departures_display(cfgs, entities, tz)
+    assert len(result[0]["times"]) == 3

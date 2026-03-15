@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 # Mock environment variables before importing settings
@@ -63,3 +64,16 @@ def influxdb_flux_response():
 def google_calendar_events():
     """Sample Google Calendar upcoming events response."""
     return load_fixture("google_calendar/events.json")
+
+
+def make_transport(routes: dict) -> httpx.MockTransport:
+    """Create a mock httpx transport from a routes dict.
+
+    routes: {(method, url_substring): httpx.Response}
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        for (method, pattern), response in routes.items():
+            if request.method == method and pattern in str(request.url):
+                return response
+        return httpx.Response(404, text="not found")
+    return httpx.MockTransport(handler)
