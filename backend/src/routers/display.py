@@ -110,7 +110,7 @@ def _build_departures_display(
 
 async def _fetch_dashboard_data(
     cache: TTLCache, http_client: httpx.AsyncClient, tz: ZoneInfo, force_refresh: bool = False
-) -> tuple[dict, dict, list, list, list, list]:
+) -> tuple[dict, dict, list, list, list, list, dict]:
     """Fetch and cache data from all sources."""
     ha_data = {}
     influx_data = {}
@@ -118,9 +118,10 @@ async def _fetch_dashboard_data(
     forecast_data: list = []
     sensors_display: list = []
     departures_display: list = []
+    sun_data: dict = {}
 
     if force_refresh:
-        for key in ("ha", "ha_forecast", "ha_sensors", "ha_departures", "influxdb", "calendar"):
+        for key in ("ha", "ha_forecast", "ha_sensors", "ha_departures", "influxdb", "calendar", "ha_sun"):
             await cache.invalidate(key)
 
     # Fetch Home Assistant weather
@@ -134,6 +135,18 @@ async def _fetch_dashboard_data(
             logger.info("Fetched fresh HA data")
         else:
             logger.info("Using cached HA data")
+
+    # Fetch sun rise/set times
+    sun_lock = await cache.acquire_lock("ha_sun")
+    async with sun_lock:
+        sun_data = await cache.get("ha_sun")
+        if sun_data is None:
+            ha_client = HomeAssistantClient(settings.ha_url, settings.ha_token, http_client)
+            sun_data = await ha_client.get_sensor_data("sun.sun")
+            await cache.set("ha_sun", sun_data, settings.cache_ttl_ha)
+            logger.info("Fetched fresh sun data")
+        else:
+            logger.info("Using cached sun data")
 
     # Fetch weather forecast
     forecast_lock = await cache.acquire_lock("ha_forecast")
@@ -216,7 +229,7 @@ async def _fetch_dashboard_data(
         else:
             logger.info("Using cached calendar data")
 
-    return ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display
+    return ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display, sun_data
 
 
 @router.get("/display.bmp")
@@ -236,7 +249,7 @@ async def get_display_bmp(
 
     try:
         tz = ZoneInfo(settings.display_timezone)
-        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display, sun_data = (
             await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
         )
         condition = ha_data.get("state") if ha_data and "error" not in ha_data else None
@@ -251,7 +264,7 @@ async def get_display_bmp(
             ha_data, influx_data, calendar_data,
             output_format="BMP", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
-            departures_display=departures_display, quote=quote,
+            departures_display=departures_display, quote=quote, sun_data=sun_data,
         )
         return Response(content=image_bytes, media_type="image/bmp")
     except Exception as e:
@@ -277,7 +290,7 @@ async def get_display_png(
 
     try:
         tz = ZoneInfo(settings.display_timezone)
-        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display = (
+        ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display, sun_data = (
             await _fetch_dashboard_data(cache, http_client, tz, force_refresh)
         )
         condition = ha_data.get("state") if ha_data and "error" not in ha_data else None
@@ -292,7 +305,7 @@ async def get_display_png(
             ha_data, influx_data, calendar_data,
             output_format="PNG", display_tz=tz, invert=settings.display_invert,
             forecast_data=forecast_data, sensors_display=sensors_display,
-            departures_display=departures_display, quote=quote,
+            departures_display=departures_display, quote=quote, sun_data=sun_data,
         )
         return Response(content=image_bytes, media_type="image/png")
     except Exception as e:

@@ -96,6 +96,7 @@ def render_dashboard(
     sensors_display: list[dict[str, Any]] | None = None,
     departures_display: list[dict[str, Any]] | None = None,
     quote: str | None = None,
+    sun_data: dict[str, Any] | None = None,
 ) -> bytes:
     """
     Render 800x480 B/W dashboard from sensor and calendar data.
@@ -124,7 +125,7 @@ def render_dashboard(
 
     tz = display_tz or _DEFAULT_TZ
 
-    _draw_weather_panel(image, draw, ha_data, forecast_data)
+    _draw_weather_panel(image, draw, ha_data, forecast_data, sun_data=sun_data, tz=tz)
     _draw_sensors_panel(image, draw, sensors_display, departures_display)
     _draw_calendar_panel(image, draw, calendar_data, tz, quote=quote)
 
@@ -206,19 +207,87 @@ def _draw_precip_chart(
         draw.text((origin_x + chart_w - scale_w, scale_y), scale_text, fill=0, font=FONT_TINY)
 
 
+def _draw_sun_arc(
+    draw: ImageDraw.ImageDraw,
+    sunrise: datetime,
+    sunset: datetime,
+    now: datetime,
+    origin_x: int,
+    origin_y: int,
+    width: int,
+    height: int,
+) -> None:
+    """
+    Draw a simple sun arc: a half-ellipse from sunrise to sunset with a filled
+    circle marking the current sun position, and time labels at each end.
+
+    origin_x/y is the top-left of the bounding box; width x height is the area.
+    The horizon is the bottom edge of the bounding box.
+    """
+    import math
+
+    label_w = 36  # px reserved for time labels on each side
+    arc_x0 = origin_x + label_w
+    arc_x1 = origin_x + width - label_w
+    arc_w = arc_x1 - arc_x0
+    horizon_y = origin_y + height - 4  # baseline of the arc
+    arc_h = height - 8  # how tall the half-ellipse rises
+
+    # Draw the half-ellipse arc (dotted via points)
+    steps = 60
+    points = []
+    for i in range(steps + 1):
+        angle = math.pi * i / steps  # 0 → π (left to right)
+        px = arc_x0 + int((1 - math.cos(angle)) / 2 * arc_w)
+        py = horizon_y - int(math.sin(angle) * arc_h)
+        points.append((px, py))
+
+    # Draw arc as a series of short lines
+    for i in range(len(points) - 1):
+        draw.line([points[i], points[i + 1]], fill=0, width=1)
+
+    # Horizon line
+    draw.line([(arc_x0, horizon_y), (arc_x1, horizon_y)], fill=0, width=1)
+
+    # Sun position: clamp to [sunrise, sunset]
+    total_s = (sunset - sunrise).total_seconds()
+    if total_s <= 0:
+        progress = 0.5
+    else:
+        elapsed = (now - sunrise).total_seconds()
+        progress = max(0.0, min(1.0, elapsed / total_s))
+
+    angle = math.pi * progress
+    sun_x = arc_x0 + int((1 - math.cos(angle)) / 2 * arc_w)
+    sun_y = horizon_y - int(math.sin(angle) * arc_h)
+
+    r = 4
+    draw.ellipse([(sun_x - r, sun_y - r), (sun_x + r, sun_y + r)], fill=0)
+
+    # Time labels
+    rise_str = sunrise.strftime("%H:%M")
+    set_str = sunset.strftime("%H:%M")
+    draw.text((origin_x, horizon_y - 8), rise_str, fill=0, font=FONT_TINY)
+    set_label_x = origin_x + width - int(draw.textlength(set_str, font=FONT_TINY))
+    draw.text((set_label_x, horizon_y - 8), set_str, fill=0, font=FONT_TINY)
+
+
 def _draw_weather_panel(
     image: Image.Image,
     draw: ImageDraw.ImageDraw,
     ha_data: dict[str, Any] | None,
     forecast_data: list[dict[str, Any]] | None = None,
+    sun_data: dict[str, Any] | None = None,
+    tz: ZoneInfo | None = None,
 ) -> None:
     """
     Draw weather panel: MDI condition icon + temp + condition text + wind,
-    then a 24h precipitation bar chart below a divider.
+    sun arc with rise/set times, then a 24h precipitation bar chart below a divider.
 
     Panel bounds: x=0–400, y=0–240
     """
     panel_x, panel_y = 10, 10
+    _tz = tz or _DEFAULT_TZ
 
     if not ha_data or "error" in ha_data:
         draw.text((panel_x, panel_y), "Weather\nUnavailable", fill=0, font=FONT_MEDIUM)
@@ -250,21 +319,56 @@ def _draw_weather_panel(
         draw.text((text_x, panel_y + 58), condition, fill=0, font=FONT_SMALL)
         draw.text((text_x, panel_y + 83), f"Wind: {wind_speed} {wind_unit}", fill=0, font=FONT_SMALL)
 
+        # Sun arc (if sun data available)
+        sun_arc_h = 36
+        sun_arc_y = panel_y + 108
+
+        sun_attrs = (sun_data or {}).get("attributes", {})
+        rise_str = sun_attrs.get("next_rising")
+        set_str = sun_attrs.get("next_setting")
+        if rise_str and set_str:
+            try:
+                sunrise = datetime.fromisoformat(rise_str).astimezone(_tz)
+                sunset = datetime.fromisoformat(set_str).astimezone(_tz)
+                now = datetime.now(_tz)
+                # next_rising/next_setting are always "next" — if sunset is before sunrise,
+                # we're currently past midnight and sunrise is tomorrow; shift sunset back 1 day
+                if sunset < sunrise:
+                    sunset -= timedelta(days=1)
+                # If sunrise is in the future (i.e. before today's sunrise), roll both back
+                if sunrise > now + timedelta(hours=18):
+                    sunrise -= timedelta(days=1)
+                    sunset -= timedelta(days=1)
+                _draw_sun_arc(
+                    draw, sunrise, sunset, now,
+                    origin_x=panel_x,
+                    origin_y=sun_arc_y,
+                    width=WEATHER_WIDTH - panel_x - 10,
+                    height=sun_arc_h,
+                )
+                divider_y = sun_arc_y + sun_arc_h + 4
+            except Exception as e:
+                logger.warning(f"Could not draw sun arc: {e}")
+                divider_y = panel_y + 113
+        else:
+            divider_y = panel_y + 113
+
         # Divider before chart
-        divider_y = panel_y + 113
         draw.line([(panel_x, divider_y), (WEATHER_WIDTH - 10, divider_y)], fill=0, width=1)
 
         # 24h precipitation bar chart
-        if forecast_data:
+        chart_baseline = divider_y + 75
+        chart_h = min(70, CALENDAR_TOP - chart_baseline - 15)
+        if forecast_data and chart_h > 10:
             _draw_precip_chart(
                 draw,
                 forecast_data,
                 origin_x=panel_x,
-                baseline_y=divider_y + 80,  # was 95 — chart sits higher in the panel
+                baseline_y=chart_baseline,
                 chart_w=WEATHER_WIDTH - panel_x - 10,
-                chart_h=70,
+                chart_h=chart_h,
             )
-        else:
+        elif not forecast_data:
             draw.text((panel_x, divider_y + 8), "No forecast data", fill=0, font=FONT_TINY)
 
     except Exception as e:
