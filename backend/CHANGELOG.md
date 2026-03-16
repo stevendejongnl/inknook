@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-03-16)
+
+### Features
+
+- **ui**: Add ink drop logo and version to status bar
+  ([`5ead05c`](https://github.com/stevendejongnl/inknook/commit/5ead05c6afd4d1c5fe30c34a502aeac01b0539d4))
+
+
 ## v1.0.1 (2026-03-16)
 
 ### Bug Fixes
