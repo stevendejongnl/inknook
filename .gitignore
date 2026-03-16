@@ -30,6 +30,9 @@ backend/kubernetes.yaml
 # Node
 node_modules/
 
+# Claude Code
+.claude/*.lock
+
 # Editor
 .idea/
 .vscode/
