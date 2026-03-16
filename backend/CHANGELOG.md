@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-03-16)
+
+### Bug Fixes
+
+- **statusbar**: Restore logo, offset ESPHome elements to avoid collision
+  ([`3b7b2fc`](https://github.com/stevendejongnl/inknook/commit/3b7b2fc580ce4c74c2fd7a520e0170f65d6848db))
+
+
 ## v1.1.1 (2026-03-16)
 
 ### Bug Fixes
