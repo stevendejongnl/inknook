@@ -21,19 +21,8 @@ COPY src src
 # Build virtual environment with uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-# Install dependencies from pyproject.toml (skip building the package itself)
-RUN uv pip install \
-    fastapi>=0.115.0 \
-    uvicorn[standard]>=0.32.0 \
-    pillow>=10.0.0 \
-    httpx>=0.28.0 \
-    pydantic-settings>=2.0.0 \
-    google-auth>=2.25.0 \
-    google-auth-httplib2>=0.2.0 \
-    requests>=2.31.0 \
-    influxdb-client[async]>=1.44.0 \
-    python-dotenv>=1.0.0 \
-    pyyaml>=6.0.0
+# Install the package and all its dependencies (registers metadata so version() works)
+RUN uv pip install .
 
 # Stage 2: Runtime
 FROM python:3.13-slim

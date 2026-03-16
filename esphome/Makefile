@@ -1,6 +1,6 @@
 CONFIG := epaper.yaml
 ESPHOME := /home/stevendejong/workspace/personal/home-automation/esphome/.venv/bin/esphome
-DEVICE_IP := $(shell grep '^device_ip:' secrets.yaml | awk '{gsub(/"/, "", $$2); print $$2}')
+DEVICE_IP := $(shell grep '^inknook_device_ip:' secrets.yaml | awk '{gsub(/"/, "", $$2); print $$2}')
 
 .PHONY: flash flash-usb flash-ota compile logs validate clean dashboard
 
