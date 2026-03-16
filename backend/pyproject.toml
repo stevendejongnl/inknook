@@ -74,3 +74,16 @@ strict_equality = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+upload_to_pypi = false
+upload_to_release = false
+build_command = ""
+commit_message = "chore(release): v{version} [skip ci]"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "refactor", "style", "chore", "docs", "test", "build", "ci"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "refactor", "chore", "style", "build"]
