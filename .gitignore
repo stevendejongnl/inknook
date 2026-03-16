@@ -32,6 +32,7 @@ node_modules/
 
 # Claude Code
 .claude/*.lock
+HANDOFF.md
 
 # Editor
 .idea/
