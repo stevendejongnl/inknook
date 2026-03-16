@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Ink drop: teardrop shape pointing up, filled black -->
+  <path d="M32 6 C32 6, 14 28, 14 40 a18 18 0 0 0 36 0 C50 28, 32 6, 32 6 Z" fill="#000"/>
+  <!-- White highlight dot (gives the "ink" look) -->
+  <circle cx="26" cy="38" r="4" fill="#fff" opacity="0.35"/>
+</svg>

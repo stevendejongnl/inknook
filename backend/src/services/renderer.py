@@ -5,8 +5,14 @@ import logging
 import os
 import urllib.request
 from datetime import UTC, date, datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
+
+try:
+    _APP_VERSION = "v" + version("inknook-backend")
+except PackageNotFoundError:
+    _APP_VERSION = "v?"
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -85,6 +91,22 @@ MDI_CONDITION_GLYPHS: dict[str, str] = {
 }
 
 
+def _draw_ink_drop(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int = 7) -> None:
+    """Draw a small ink-drop icon centred at (cx, cy).
+
+    Shape: filled circle (body) with a triangular point at the top — like an
+    upside-down teardrop / ink drop.  Fits in roughly (2r+2) × (2r+6) pixels.
+    """
+    # Body: filled circle
+    draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill=0)
+    # Point: triangle above the circle
+    tip_y = cy - r - r + 2  # tip of the drop
+    draw.polygon(
+        [(cx - r + 2, cy - r + 3), (cx + r - 2, cy - r + 3), (cx, tip_y)],
+        fill=0,
+    )
+
+
 def render_dashboard(
     ha_data: dict[str, Any] | None = None,
     influx_data: dict[str, Any] | None = None,
@@ -128,6 +150,13 @@ def render_dashboard(
     _draw_weather_panel(image, draw, ha_data, forecast_data, sun_data=sun_data, tz=tz)
     _draw_sensors_panel(image, draw, sensors_display, departures_display)
     _draw_calendar_panel(image, draw, calendar_data, tz, quote=quote)
+
+    # Bottom status bar: logo + name (left), version (right)
+    bar_y = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT + (BOTTOM_BAR_HEIGHT - 16) // 2
+    _draw_ink_drop(draw, cx=10, cy=DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT // 2)
+    draw.text((24, bar_y), "inknook", fill=0, font=FONT_TINY)
+    ver_w = int(draw.textlength(_APP_VERSION, font=FONT_TINY))
+    draw.text((DISPLAY_WIDTH - ver_w - 6, bar_y), _APP_VERSION, fill=0, font=FONT_TINY)
 
     gray = image.convert("L")
     if invert:

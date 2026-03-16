@@ -1,4 +1,8 @@
-# Inknook
+<p align="center">
+  <img src="logo.svg" width="64" height="64" alt="inknook logo">
+  <br>
+  <strong>inknook</strong>
+</p>
 
 A wall-mounted e-paper dashboard in a photo frame. Displays weather, sensor readings, and calendar events — fetched from Home Assistant and rendered as a 800×480 black-and-white image by a FastAPI backend.
 
