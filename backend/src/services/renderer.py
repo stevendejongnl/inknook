@@ -663,7 +663,7 @@ def _draw_calendar_panel(
     else:
         section_h = (DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT - CALENDAR_TOP) // len(next_days)
         for idx, day in enumerate(next_days):
-            sy = CALENDAR_TOP + idx * section_h + 6
+            sy = CALENDAR_TOP + idx * section_h + 8
             sec_bottom = CALENDAR_TOP + (idx + 1) * section_h - 4
 
             # Day label
