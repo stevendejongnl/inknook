@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-03-16)
+
+### Bug Fixes
+
+- **calendar**: Align upcoming day sections with Today column
+  ([`aa7d2f4`](https://github.com/stevendejongnl/inknook/commit/aa7d2f44ad58f029d4daaa2acc9e5df94f41feaf))
+
+
 ## v1.1.0 (2026-03-16)
 
 ### Features
