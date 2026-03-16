@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3 (2026-03-16)
+
+### Chores
+
+- **esphome**: Add use_address for OTA targeting
+  ([`505231b`](https://github.com/stevendejongnl/inknook/commit/505231b0e7d1efeaa4e0137c0ccab6bb22661387))
+
+
 ## v1.1.2 (2026-03-16)
 
 ### Bug Fixes
