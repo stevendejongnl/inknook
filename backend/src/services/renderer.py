@@ -644,6 +644,8 @@ def _draw_calendar_panel(
                 label = day.strftime("%A  %-d %b")
             draw.text((rx, sy), label, fill=0, font=FONT_TINY_BOLD)
             sy += 18
+            draw.line([(rx, sy), (DISPLAY_WIDTH - 5, sy)], fill=0, width=1)
+            sy += 5
 
             for dt, event in by_day[day]:
                 if sy >= sec_bottom:
