@@ -288,12 +288,12 @@ display:
           else                     batt_icon = "\U000F0079";  // mdi:battery (full)
           snprintf(batt_str, sizeof(batt_str), "%d%%", batt_pct);
         }
-        it.printf(8,  452, id(font_status), batt_icon);
-        it.printf(26, 452, id(font_status), batt_str);
+        it.printf(90,  452, id(font_status), batt_icon);
+        it.printf(108, 452, id(font_status), batt_str);
 
         // WiFi icon + signal quality label
         float rssi = id(wifi_signal_dbm).state;
-        it.printf(100, 452, id(font_status), "\U000F05A9");  // mdi:wifi
+        it.printf(180, 452, id(font_status), "\U000F05A9");  // mdi:wifi
         const char* wifi_str = "---";
         if (!isnan(rssi)) {
           if      (rssi >= -50) wifi_str = "Excellent";
@@ -302,22 +302,20 @@ display:
           else if (rssi >= -80) wifi_str = "Weak";
           else                  wifi_str = "Poor";
         }
-        it.printf(118, 452, id(font_status), wifi_str);
+        it.printf(198, 452, id(font_status), wifi_str);
 
-        // Last update time — clock icon right after WiFi label
-        it.printf(210, 452, id(font_status), "\U000F0150");  // mdi:clock-outline
+        // Last update time + next update inline — clock icon right after WiFi label
+        it.printf(290, 452, id(font_status), "\U000F0150");  // mdi:clock-outline
         auto now = id(sntp_time).now();
         if (now.is_valid()) {
-          it.strftime(228, 452, id(font_status), "Updated %H:%M", now);
-          // Next update = now + 30 min (right-aligned)
           time_t next_t = now.timestamp + 30 * 60;
           struct tm *next_tm = localtime(&next_t);
           char next_buf[16];
           strftime(next_buf, sizeof(next_buf), "%H:%M", next_tm);
-          it.printf(792, 452, id(font_status), TextAlign::RIGHT, "Next %s", next_buf);
+          it.strftime(308, 452, id(font_status), "Updated %H:%M", now);
+          it.printf(418, 452, id(font_status), "· Next %s", next_buf);
         } else {
-          it.printf(228, 452, id(font_status), "Updated --:--");
-          it.printf(792, 452, id(font_status), TextAlign::RIGHT, "Next --:--");
+          it.printf(308, 452, id(font_status), "Updated --:-- · Next --:--");
         }
       }
 

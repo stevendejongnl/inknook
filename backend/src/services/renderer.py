@@ -151,7 +151,8 @@ def render_dashboard(
     _draw_sensors_panel(image, draw, sensors_display, departures_display)
     _draw_calendar_panel(image, draw, calendar_data, tz, quote=quote)
 
-    # Bottom status bar: logo + name (left), version (right)
+    # Bottom status bar: logo + name on the left (ESPHome battery starts at x=90 to avoid overlap)
+    # ESPHome draws: [90] battery  [180] wifi  [270] clock Updated HH:MM · Next HH:MM  [right] version
     bar_y = DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT + (BOTTOM_BAR_HEIGHT - 16) // 2
     _draw_ink_drop(draw, cx=10, cy=DISPLAY_HEIGHT - BOTTOM_BAR_HEIGHT // 2)
     draw.text((24, bar_y), "inknook", fill=0, font=FONT_TINY)
