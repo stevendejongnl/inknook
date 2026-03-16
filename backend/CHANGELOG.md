@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.4 (2026-03-16)
+
+### Bug Fixes
+
+- **esphome**: Fix status bar alignment and namespace secret keys
+  ([`7a5565b`](https://github.com/stevendejongnl/inknook/commit/7a5565b9094a333280075750abf77e4e078374e8))
+
+
 ## v1.1.3 (2026-03-16)
 
 ### Chores
