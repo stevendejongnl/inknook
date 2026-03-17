@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.1 (2026-03-17)
+
+### Chores
+
+- **esphome**: Rename epaper.yaml to inknook.yaml
+  ([`311fd3d`](https://github.com/stevendejongnl/inknook/commit/311fd3df868dae3d0e51528c344a80a9b77012ec))
+
+
 ## v1.3.0 (2026-03-17)
 
 ### Features
