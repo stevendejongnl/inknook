@@ -1,6 +1,6 @@
 substitutions:
-  name: inknook-dashboard
-  friendly_name: "ePaper Dashboard"
+  name: inknook
+  friendly_name: "Inknook Dashboard"
   backend_base_url: !secret inknook_backend_base_url
   backend_bmp_url: "${backend_base_url}/display.bmp"
   backend_quote_url: "${backend_base_url}/quote"

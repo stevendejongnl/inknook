@@ -1,8 +1,8 @@
-CONFIG := epaper.yaml
+CONFIG := inknook.yaml
 ESPHOME := /home/stevendejong/workspace/personal/home-automation/esphome/.venv/bin/esphome
 DEVICE_IP := $(shell grep '^inknook_device_ip:' secrets.yaml | awk '{gsub(/"/, "", $$2); print $$2}')
 HA_HOST := root@192.168.1.25
-HA_CONFIG_PATH := /config/esphome/epaper.yaml
+HA_CONFIG_PATH := /config/esphome/inknook.yaml
 
 .PHONY: flash flash-usb flash-ota compile logs validate clean dashboard upload-ha
 
@@ -36,7 +36,7 @@ clean: ## Remove build artifacts
 dashboard: ## Open ESPHome dashboard in browser (runs local web UI)
 	$(ESPHOME) dashboard .
 
-upload-ha: ## Upload epaper.yaml to Home Assistant ESPHome config
+upload-ha: ## Upload inknook.yaml to Home Assistant ESPHome config
 	scp -P 24 $(CONFIG) $(HA_HOST):$(HA_CONFIG_PATH)
 	@echo "  Uploaded $(CONFIG) → $(HA_HOST):$(HA_CONFIG_PATH)"
 
