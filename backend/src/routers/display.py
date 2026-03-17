@@ -232,6 +232,40 @@ async def _fetch_dashboard_data(
     return ha_data, influx_data, calendar_data, forecast_data, sensors_display, departures_display, sun_data
 
 
+@router.get("/quote")
+async def get_quote_endpoint(
+    request: Request,
+) -> dict[str, str]:
+    """
+    Return today's daily quote as JSON.
+
+    Home Assistant can poll this with a rest sensor to expose the quote
+    as a sensor state for use in notifications and automations.
+
+    Response: {"quote": "<text>"}
+    """
+    app = request.app
+    cache: TTLCache = app.state.cache
+    http_client: httpx.AsyncClient = app.state.http_client
+
+    try:
+        tz = ZoneInfo(settings.display_timezone)
+        ha_data, *_ = await _fetch_dashboard_data(cache, http_client, tz)
+        condition = ha_data.get("state") if ha_data and "error" not in ha_data else None
+        temperature = ha_data.get("attributes", {}).get("temperature") if ha_data else None
+        quote = get_quote(QuoteContext(
+            today=datetime.now(tz).date(),
+            weather_condition=condition,
+            temperature=float(temperature) if temperature is not None else None,
+            language=settings.quote_language,
+        ))
+    except Exception as e:
+        logger.error(f"Error generating quote: {e}")
+        quote = ""
+
+    return {"quote": quote}
+
+
 @router.get("/display.bmp")
 async def get_display_bmp(
     request: Request,

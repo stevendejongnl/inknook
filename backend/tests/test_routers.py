@@ -260,6 +260,23 @@ def test_build_departures_delay_calculation():
     assert result[0]["times"][0]["delay_min"] == 3
 
 
+def test_quote_endpoint_returns_json(client):
+    """GET /quote returns 200 with a non-empty quote string."""
+    response = client.get("/quote")
+    assert response.status_code == 200
+    body = response.json()
+    assert "quote" in body
+    assert isinstance(body["quote"], str)
+    assert len(body["quote"]) > 0
+
+
+def test_quote_endpoint_consistent_within_day(client):
+    """Two calls on the same day return the same quote."""
+    r1 = client.get("/quote")
+    r2 = client.get("/quote")
+    assert r1.json()["quote"] == r2.json()["quote"]
+
+
 def test_build_departures_max_departures_respected():
     tz = ZoneInfo("UTC")
     times = [
