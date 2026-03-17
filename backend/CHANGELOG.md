@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.3 (2026-03-17)
+
+### Bug Fixes
+
+- **esphome**: Fetch daily quote during wake cycle, not on interval
+  ([`915c536`](https://github.com/stevendejongnl/inknook/commit/915c53669021e428e84ec29ad212fa6d17ed955d))
+
+
 ## v1.3.2 (2026-03-17)
 
 ### Chores
