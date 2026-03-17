@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.2 (2026-03-17)
+
+### Chores
+
+- **makefile**: Enumerate subdir targets for shell completion
+  ([`c1d55c9`](https://github.com/stevendejongnl/inknook/commit/c1d55c996323fcddd5361aa83db6ed1f162dd9b3))
+
+
 ## v1.3.1 (2026-03-17)
 
 ### Chores
