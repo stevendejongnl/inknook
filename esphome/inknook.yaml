@@ -96,28 +96,6 @@ text_sensor:
     id: daily_quote
     icon: "mdi:format-quote-open"
 
-interval:
-  - interval: 30min
-    then:
-      - http_request.get:
-          url: ${backend_quote_url}
-          capture_response: true
-          on_response:
-            then:
-              - lambda: |-
-                  // Extract value of "quote" key from JSON {"quote": "..."}
-                  auto start = body.find("\"quote\"");
-                  if (start != std::string::npos) {
-                    start = body.find("\"", start + 7);
-                    if (start != std::string::npos) {
-                      start += 1;
-                      auto end = body.find("\"", start);
-                      if (end != std::string::npos) {
-                        id(daily_quote).publish_state(body.substr(start, end - start));
-                      }
-                    }
-                  }
-
 sensor:
   - platform: wifi_signal
     name: "WiFi Signal"
@@ -237,6 +215,25 @@ online_image:
         - globals.set:
             id: loading
             value: 'false'
+        - logger.log: "Fetching daily quote"
+        - http_request.get:
+            url: ${backend_quote_url}
+            capture_response: true
+            on_response:
+              then:
+                - lambda: |-
+                    // Extract value of "quote" key from JSON {"quote": "..."}
+                    auto start = body.find("\"quote\"");
+                    if (start != std::string::npos) {
+                      start = body.find("\"", start + 7);
+                      if (start != std::string::npos) {
+                        start += 1;
+                        auto end = body.find("\"", start);
+                        if (end != std::string::npos) {
+                          id(daily_quote).publish_state(body.substr(start, end - start));
+                        }
+                      }
+                    }
         - logger.log: "Waiting for SNTP sync before render"
         - wait_until:
             condition:
