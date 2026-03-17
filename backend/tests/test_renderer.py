@@ -10,6 +10,7 @@ from src.services.renderer import (
     _draw_precip_chart,
     _draw_sun_arc,
     _event_time_str,
+    _forecast_temp_stats,
     _parse_event_dt,
     _wrap_text,
     render_dashboard,
@@ -608,3 +609,87 @@ def test_render_dashboard_calendar_all_three_next_days():
         display_tz=ZoneInfo("UTC"),
     )
     assert len(image_bytes) > 0
+
+
+# ── _forecast_temp_stats ───────────────────────────────────────────────────────
+
+def test_forecast_temp_stats_normal():
+    """Returns correct (min, avg, max) for a normal list."""
+    forecast_data = [{"temperature": t} for t in [10.0, 20.0, 30.0]]
+    result = _forecast_temp_stats(forecast_data)
+    assert result is not None
+    t_min, t_avg, t_max = result
+    assert t_min == 10.0
+    assert t_max == 30.0
+    assert abs(t_avg - 20.0) < 0.001
+
+
+def test_forecast_temp_stats_empty_list():
+    """Empty list returns None."""
+    assert _forecast_temp_stats([]) is None
+
+
+def test_forecast_temp_stats_all_missing():
+    """Entries without temperature key → filtered out → returns None."""
+    forecast_data = [{"precipitation": 1.0} for _ in range(5)]
+    assert _forecast_temp_stats(forecast_data) is None
+
+
+def test_forecast_temp_stats_partial_missing():
+    """Only entries with numeric temperature are used."""
+    forecast_data = [
+        {"temperature": 15.0},
+        {"precipitation": 0.5},  # no temperature
+        {"temperature": "N/A"},   # non-numeric
+        {"temperature": 25.0},
+    ]
+    result = _forecast_temp_stats(forecast_data)
+    assert result is not None
+    t_min, t_avg, t_max = result
+    assert t_min == 15.0
+    assert t_max == 25.0
+
+
+def test_forecast_temp_stats_non_numeric_only():
+    """All entries have non-numeric temperature → returns None."""
+    forecast_data = [{"temperature": "N/A"} for _ in range(5)]
+    assert _forecast_temp_stats(forecast_data) is None
+
+
+def test_forecast_temp_stats_capped_at_24():
+    """Only first 24 entries are used."""
+    # entries 0-23 all have temp=10; entry 24 has temp=100 (should be ignored)
+    forecast_data = [{"temperature": 10.0} for _ in range(24)]
+    forecast_data.append({"temperature": 100.0})
+    result = _forecast_temp_stats(forecast_data)
+    assert result is not None
+    _, _, t_max = result
+    assert t_max == 10.0
+
+
+# ── Integration: forecast stats rendering ─────────────────────────────────────
+
+def test_render_dashboard_forecast_stats_rendered():
+    """With forecast data containing temperatures, stats block renders ok."""
+    ha_data = {"state": "sunny", "attributes": {"temperature": 20.0, "wind_speed": 5}}
+    forecast_data = [
+        {"datetime": f"2026-03-17T{h:02d}:00:00+01:00", "temperature": 10.0 + h * 0.5, "precipitation": 0.0}
+        for h in range(24)
+    ]
+    image_bytes = render_dashboard(ha_data=ha_data, forecast_data=forecast_data, output_format="BMP")
+    assert len(image_bytes) > 0
+    img = Image.open(BytesIO(image_bytes))
+    assert img.size == (800, 480)
+
+
+def test_render_dashboard_forecast_no_temps_skips_stats():
+    """Forecast entries with no temperature key → stats block silently skipped."""
+    ha_data = {"state": "cloudy", "attributes": {"temperature": 15.0, "wind_speed": 3}}
+    forecast_data = [
+        {"datetime": f"2026-03-17T{h:02d}:00:00+01:00", "precipitation": 0.1}
+        for h in range(24)
+    ]
+    image_bytes = render_dashboard(ha_data=ha_data, forecast_data=forecast_data, output_format="BMP")
+    assert len(image_bytes) > 0
+    img = Image.open(BytesIO(image_bytes))
+    assert img.size == (800, 480)

@@ -302,6 +302,20 @@ def _draw_sun_arc(
     draw.text((set_label_x, horizon_y - 8), set_str, fill=0, font=FONT_TINY)
 
 
+def _forecast_temp_stats(
+    forecast_data: list[dict[str, Any]],
+) -> tuple[float, float, float] | None:
+    """Return (min_temp, avg_temp, max_temp) from 24h hourly forecast entries, or None."""
+    temps = [
+        float(e["temperature"])
+        for e in forecast_data[:24]
+        if isinstance(e.get("temperature"), (int, float))
+    ]
+    if not temps:
+        return None
+    return min(temps), sum(temps) / len(temps), max(temps)
+
+
 def _draw_weather_panel(
     image: Image.Image,
     draw: ImageDraw.ImageDraw,
@@ -344,6 +358,16 @@ def _draw_weather_panel(
 
         # Temperature (large) next to icon
         draw.text((text_x, panel_y), temp_str, fill=0, font=FONT_LARGE)
+
+        # Min/avg/max stats to the right of the large temp
+        if forecast_data:
+            stats = _forecast_temp_stats(forecast_data)
+            if stats is not None:
+                t_min, t_avg, t_max = stats
+                stat_x = text_x + int(draw.textlength(temp_str, font=FONT_LARGE)) + 8
+                draw.text((stat_x, panel_y),      f"max {t_max:.0f}°", fill=0, font=FONT_TINY)
+                draw.text((stat_x, panel_y + 18), f"avg {t_avg:.0f}°", fill=0, font=FONT_TINY)
+                draw.text((stat_x, panel_y + 36), f"min {t_min:.0f}°", fill=0, font=FONT_TINY)
 
         # Condition and wind below temperature
         draw.text((text_x, panel_y + 58), condition, fill=0, font=FONT_SMALL)
