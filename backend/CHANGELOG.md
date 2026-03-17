@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-03-17)
+
+### Bug Fixes
+
+- **esphome**: Nudge status bar items up 6px
+  ([`af50e0c`](https://github.com/stevendejongnl/inknook/commit/af50e0cf69e59291326cf613d2decf152fd4e12d))
+
+### Features
+
+- **renderer**: Add min/avg/max temp stats to weather panel
+  ([`446b109`](https://github.com/stevendejongnl/inknook/commit/446b10925368a071b9a47008fa2a32bac21a3d55))
+
+
 ## v1.1.4 (2026-03-16)
 
 ### Bug Fixes
