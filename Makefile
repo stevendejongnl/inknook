@@ -1,6 +1,9 @@
 SUBDIRS := esphome backend
 
-.PHONY: help clean hooks
+# Collect all targets from sub-Makefiles so shell completion can enumerate them
+SUBDIR_TARGETS := $(shell grep -hE '^[a-zA-Z_-]+:' esphome/Makefile backend/Makefile 2>/dev/null | grep -v '^\.PHONY' | cut -d: -f1 | sort -u)
+
+.PHONY: help clean hooks $(SUBDIR_TARGETS)
 
 # ── Help: parse ## comments from all sub-Makefiles ───────────────────────────
 
