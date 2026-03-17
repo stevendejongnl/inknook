@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-03-17)
+
+### Features
+
+- **inknook**: Expose daily quote via /quote endpoint and ESPHome sensor
+  ([`22d6da3`](https://github.com/stevendejongnl/inknook/commit/22d6da3c43ade70f1757a5d0ddc77ef7ba52825e))
+
+
 ## v1.2.0 (2026-03-17)
 
 ### Bug Fixes
