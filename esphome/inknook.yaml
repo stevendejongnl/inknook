@@ -38,7 +38,7 @@ wifi:
   # Fallback AP if WiFi unavailable
   ap:
     ssid: "EPaper Fallback"
-    password: !secret ota_password
+    password: !secret inknook_ota_password
   on_connect:
     then:
       - if:
@@ -71,7 +71,7 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    password: !secret inknook_ota_password
 
 # ── Time ────────────────────────────────────────────────────────────────────
 
