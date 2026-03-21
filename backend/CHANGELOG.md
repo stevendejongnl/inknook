@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.4 (2026-03-21)
+
+### Chores
+
+- **esphome**: Add upgrade target and rename OTA secret
+  ([`8e2c869`](https://github.com/stevendejongnl/inknook/commit/8e2c869b0b1ac29489c79a3fc5f2defaf89568c8))
+
+
 ## v1.3.3 (2026-03-17)
 
 ### Bug Fixes
