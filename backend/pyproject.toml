@@ -13,7 +13,7 @@ authors = [{name = "Steven de Jong"}]
 
 dependencies = [
     "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
+    "uvicorn[standard]>=0.44.0",
     "pillow>=10.0.0",
     "httpx>=0.28.0",
     "pydantic-settings>=2.0.0",
