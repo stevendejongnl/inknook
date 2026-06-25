@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.5 (2026-06-25)
+
+### Chores
+
+- Rebuild image for CVE-2026-31789 base image fix
+  ([`0e457e5`](https://github.com/stevendejongnl/inknook/commit/0e457e561ba3dd320442d8c249fc42c562889651))
+
+
 ## v1.3.4 (2026-03-21)
 
 ### Chores
