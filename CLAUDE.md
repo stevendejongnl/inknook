@@ -77,6 +77,7 @@ keel.sh/pollSchedule: "@every 5m"
 
 ## Battery Thresholds
 
+- Battery: BLY 523450, 3.7V nominal, 1000mAh, cutoff 2.75V
 - LiPo range: 3.0V (empty) → 4.2V (full)
-- Low battery guard: `< 3.3V` (~25%) — skips fetch, shows warning screen, sleeps 4h
+- Low battery guard: `< 3.1V` (~8%) — skips fetch, shows warning screen, sleeps 4h
 - ADC pin: GPIO35 (A2) with ×2 filter for voltage divider

@@ -4,6 +4,11 @@ substitutions:
   backend_base_url: !secret inknook_backend_base_url
   backend_bmp_url: "${backend_base_url}/display.bmp"
   backend_quote_url: "${backend_base_url}/quote"
+  # Battery profile — adjust these when swapping batteries
+  # BLY 523450: 3.7V nominal, 1000mAh — full=4.2, empty=3.0, low_guard=3.1 (~8%)
+  battery_full_voltage: "4.2"   # Charge voltage (V)
+  battery_empty_voltage: "3.0"  # Display 0% below this (V)
+  battery_low_guard: "3.1"      # Show warning screen + sleep 4h below this (V)
 
 esphome:
   name: ${name}
@@ -20,7 +25,7 @@ esphome:
       - lambda: |-
           float v = id(battery_voltage).state;
           // Ignore readings below 1V — ADC hasn't settled yet (spurious sample)
-          if (!isnan(v) && v > 1.0f && v < 3.3f) {
+          if (!isnan(v) && v > 1.0f && v < ${battery_low_guard}f) {
             id(battery_low) = true;
           }
 
@@ -309,7 +314,7 @@ display:
         const char* batt_icon = "\U000F0083";  // mdi:battery-alert (fallback)
         char batt_str[8] = "?";
         if (!isnan(batt)) {
-          int batt_pct = (int)((batt - 3.0f) / (4.2f - 3.0f) * 100.0f);
+          int batt_pct = (int)((batt - ${battery_empty_voltage}f) / (${battery_full_voltage}f - ${battery_empty_voltage}f) * 100.0f);
           batt_pct = batt_pct < 0 ? 0 : (batt_pct > 100 ? 100 : batt_pct);
           if (batt_pct <= 20)      batt_icon = "\U000F007B";  // mdi:battery-20
           else if (batt_pct <= 50) batt_icon = "\U000F007E";  // mdi:battery-50
