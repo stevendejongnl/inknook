@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.6 (2026-07-15)
+
+### Bug Fixes
+
+- **esphome**: Lower battery low-guard to 3.1V, parameterize battery profile
+  ([`7b26878`](https://github.com/stevendejongnl/inknook/commit/7b26878ad920e81c3a9ec3322c748a64a4980482))
+
+
 ## v1.3.5 (2026-06-25)
 
 ### Chores
