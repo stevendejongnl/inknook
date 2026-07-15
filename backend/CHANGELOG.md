@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.7 (2026-07-15)
+
+### Chores
+
+- **docker**: Trigger rebuild for base image CVE refresh
+  ([`b58fab8`](https://github.com/stevendejongnl/inknook/commit/b58fab816ecbda6dc2c6c6930c58ed9dc9dc0452))
+
+
 ## v1.3.6 (2026-07-15)
 
 ### Bug Fixes
