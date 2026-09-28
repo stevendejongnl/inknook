@@ -84,6 +84,8 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: release
 
@@ -115,12 +117,43 @@ jobs:
       with:
         context: backend
         push: true
-        provenance: false  # Avoid OCI index format — Keel can't poll manifests with Accept: OCI index
+        # Kept after Keel was decommissioned (2026-09-28): nothing polls manifests now,
+        # but plain manifests stay the simpler artifact and changing this is unrelated churn.
+        provenance: false
         tags: |
           ghcr.io/stevendejongnl/inknook-backend:latest
           ghcr.io/stevendejongnl/inknook-backend:${{ steps.version.outputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to k8s
+    runs-on: [self-hosted, k8s]
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.outputs.version != ''
+    steps:
+      # CI previously stopped at the image push and Keel pulled it into the cluster. Keel
+      # was decommissioned on 2026-09-28, so without this a release is built and published
+      # but never deployed.
+      #
+      # Sets the image as well as restarting: the deployment pins an immutable version tag,
+      # so restarting alone re-pulls the identical image.
+      #
+      # Auth is the runner pod's own ServiceAccount token, which holds only get+patch on
+      # apps/deployments via the ci-runner-deploy ClusterRole. No kubeconfig in CI.
+      - name: Set image and restart deployment
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          RESTART_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          curl -sf -X PATCH \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/strategic-merge-patch+json" \
+            --cacert "$CA" \
+            "https://kubernetes.default.svc/apis/apps/v1/namespaces/inknook-backend/deployments/inknook-backend" \
+            -d "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$RESTART_AT\"}},\"spec\":{\"containers\":[{\"name\":\"inknook-backend\",\"image\":\"ghcr.io/stevendejongnl/inknook-backend:${VERSION}\"}]}}}}"
 
   security-scan:
     name: Security Scan
